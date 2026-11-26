@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'screens/azkar_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/quran_screen.dart';
+import 'screens/settings_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,16 +59,8 @@ class _MainShellScreenState extends State<MainShellScreen> {
   late final List<Widget> _pages = [
     const HomePrayerScreen(),
     const AzkarScreen(),
-    const _PlaceholderTab(
-      title: 'الختمة',
-      subtitle: 'متابعة صفحات المصحف وحفظ آخر موضع قراءة',
-      icon: Icons.menu_book_outlined,
-    ),
-    const _PlaceholderTab(
-      title: 'الإعدادات',
-      subtitle: 'الموقع الجغرافي، طريقة حساب المواقيت، والتنبيهات',
-      icon: Icons.more_horiz,
-    ),
+    const QuranScreen(),
+    const SettingsScreen(),
   ];
 
   @override
@@ -107,48 +101,6 @@ class _MainShellScreenState extends State<MainShellScreen> {
             label: 'والإعدادات',
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _PlaceholderTab extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-
-  const _PlaceholderTab({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final primaryColor = Theme.of(context).colorScheme.primary;
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 56, color: primaryColor),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade700),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
