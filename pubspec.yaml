@@ -1,21 +1,22 @@
-name: youmk_binour_allah
-description: "تطبيق إسلامي مفتوح المصدر لمواقيت الصلاة، الأذكار، الختمة، والإعدادات."
+name: youmak_binour_allah
+description: "تطبيق يومك بنور الله"
 publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.2.0 <4.0.0'
+  sdk: '>=3.5.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  adhan: ^2.0.0+1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
+  flutter_lints: ^5.0.0
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/data/
