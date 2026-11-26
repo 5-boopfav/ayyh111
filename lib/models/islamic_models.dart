@@ -36,14 +36,19 @@ class QuranPageData {
   });
 
   factory QuranPageData.fromJson(Map<String, dynamic> json) {
-    final rawVerses = (json['verses'] as List<dynamic>?) ?? const <dynamic>[];
+    final List<QuranVerseItem> parsedVerses = <QuranVerseItem>[];
+    final rawVerses = json['verses'];
+    if (rawVerses is List) {
+      for (final item in rawVerses) {
+        if (item is Map<String, dynamic>) {
+          parsedVerses.add(QuranVerseItem.fromJson(item));
+        }
+      }
+    }
     return QuranPageData(
       page: (json['page'] as num?)?.toInt() ?? 1,
       juz: (json['juz'] as num?)?.toInt() ?? 1,
-      verses: rawVerses
-          .whereType>()
-          .map(QuranVerseItem.fromJson)
-          .toList(),
+      verses: parsedVerses,
     );
   }
 }
@@ -83,14 +88,19 @@ class AzkarChapter {
   });
 
   factory AzkarChapter.fromJson(Map<String, dynamic> json) {
-    final rawItems = (json['items'] as List<dynamic>?) ?? const <dynamic>[];
+    final List<DhikrItem> parsedItems = <DhikrItem>[];
+    final rawItems = json['items'];
+    if (rawItems is List) {
+      for (final item in rawItems) {
+        if (item is Map<String, dynamic>) {
+          parsedItems.add(DhikrItem.fromJson(item));
+        }
+      }
+    }
     return AzkarChapter(
       id: (json['id'] as String?) ?? '',
       title: (json['title'] as String?) ?? '',
-      items: rawItems
-          .whereType>()
-          .map(DhikrItem.fromJson)
-          .toList(),
+      items: parsedItems,
     );
   }
 }
@@ -103,7 +113,8 @@ class LocalIslamicRepository {
   List<AzkarChapter>? _azkarChaptersCache;
 
   Future> loadQuranPages() async {
-    if (_quranPagesCache != null) return _quranPagesCache!;
+    final cached = _quranPagesCache;
+    if (cached != null) return cached;
 
     try {
       final rawString =
@@ -128,7 +139,8 @@ class LocalIslamicRepository {
   }
 
   Future<List<AzkarChapter>> loadAzkarChapters() async {
-    if (_azkarChaptersCache != null) return _azkarChaptersCache!;
+    final cached = _azkarChaptersCache;
+    if (cached != null) return cached;
 
     try {
       final rawString =
