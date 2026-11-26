@@ -112,7 +112,7 @@ class LocalIslamicRepository {
   Map<int, QuranPageData>? _quranPagesCache;
   List<AzkarChapter>? _azkarChaptersCache;
 
-  Future> loadQuranPages() async {
+  Future<dynamic> loadQuranPages() async {
     final cached = _quranPagesCache;
     if (cached != null) return cached;
 
@@ -138,7 +138,7 @@ class LocalIslamicRepository {
     }
   }
 
-  Future<List<AzkarChapter>> loadAzkarChapters() async {
+  Future<dynamic> loadAzkarChapters() async {
     final cached = _azkarChaptersCache;
     if (cached != null) return cached;
 
