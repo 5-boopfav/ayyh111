@@ -15,11 +15,15 @@ class QuranVerseItem {
   });
 
   factory QuranVerseItem.fromJson(Map<String, dynamic> json) {
+    final rawSurah = json['surahNumber'] ?? json['sura'];
+    final rawAyah = json['ayahNumber'] ?? json['aya'];
+    final rawText = json['text'] ?? json['uthmani'];
+
     return QuranVerseItem(
-      surahNumber: (json['surahNumber'] as num?)?.toInt() ?? 1,
+      surahNumber: (rawSurah as num?)?.toInt() ?? 1,
       surahName: (json['surahName'] as String?)?.trim() ?? '',
-      ayahNumber: (json['ayahNumber'] as num?)?.toInt() ?? 1,
-      text: (json['text'] as String?) ?? '',
+      ayahNumber: (rawAyah as num?)?.toInt() ?? 1,
+      text: (rawText as String?) ?? '',
     );
   }
 }
@@ -67,10 +71,13 @@ class DhikrItem {
   });
 
   factory DhikrItem.fromJson(Map<String, dynamic> json) {
+    final rawId = json['id'];
+    final rawRepeat = json['repeatCount'] ?? json['count'];
+
     return DhikrItem(
-      id: (json['id'] as String?) ?? '',
+      id: rawId == null ? '' : rawId.toString(),
       text: (json['text'] as String?) ?? '',
-      repeatCount: (json['repeatCount'] as num?)?.toInt() ?? 1,
+      repeatCount: (rawRepeat as num?)?.toInt() ?? 1,
       reference: json['reference'] as String?,
     );
   }
@@ -89,17 +96,21 @@ class AzkarChapter {
 
   factory AzkarChapter.fromJson(Map<String, dynamic> json) {
     final List<DhikrItem> parsedItems = <DhikrItem>[];
-    final rawItems = json['items'];
-    if (rawItems is List) {
-      for (final item in rawItems) {
+    final rawList = json['items'] ?? json['array'];
+    if (rawList is List) {
+      for (final item in rawList) {
         if (item is Map<String, dynamic>) {
           parsedItems.add(DhikrItem.fromJson(item));
         }
       }
     }
+
+    final rawId = json['id'];
+    final rawTitle = json['title'] ?? json['category'];
+
     return AzkarChapter(
-      id: (json['id'] as String?) ?? '',
-      title: (json['title'] as String?) ?? '',
+      id: rawId == null ? '' : rawId.toString(),
+      title: (rawTitle as String?)?.trim() ?? '',
       items: parsedItems,
     );
   }
@@ -125,8 +136,30 @@ class LocalIslamicRepository {
       if (decoded is List) {
         for (final entry in decoded) {
           if (entry is Map<String, dynamic>) {
-            final pageData = QuranPageData.fromJson(entry);
-            pagesMap[pageData.page] = pageData;
+            if (entry.containsKey('verses') || entry.containsKey('page')) {
+              final pageData = QuranPageData.fromJson(entry);
+              pagesMap[pageData.page] = pageData;
+            } else if (entry.containsKey('sura') ||
+                entry.containsKey('uthmani')) {
+              final pageNumber = (entry['page'] as num?)?.toInt() ?? 1;
+              final juzNumber = (entry['juz'] as num?)?.toInt() ?? 1;
+              final verse = QuranVerseItem.fromJson(entry);
+              final existingPage = pagesMap[pageNumber];
+
+              if (existingPage == null) {
+                pagesMap[pageNumber] = QuranPageData(
+                  page: pageNumber,
+                  juz: juzNumber,
+                  verses: <QuranVerseItem>[verse],
+                );
+              } else {
+                pagesMap[pageNumber] = QuranPageData(
+                  page: existingPage.page,
+                  juz: existingPage.juz,
+                  verses: <QuranVerseItem>[...existingPage.verses, verse],
+                );
+              }
+            }
           }
         }
       }
