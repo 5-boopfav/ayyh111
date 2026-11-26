@@ -38,8 +38,19 @@ class _QuranScreenState extends State<QuranScreen>
   Future<void> _loadLocalPages() async {
     final data = await LocalIslamicRepository.instance.loadQuranPages();
     if (!mounted) return;
+
+    final Map<int, QuranPageData> loadedMap =
+        data is Map<int, QuranPageData> ? data : const <int, QuranPageData>{};
+
+    int initialPage = _currentPage;
+    if (loadedMap.isNotEmpty && !loadedMap.containsKey(initialPage)) {
+      final sortedPages = loadedMap.keys.toList()..sort();
+      initialPage = sortedPages.first;
+    }
+
     setState(() {
-      _pagesMap = data;
+      _pagesMap = loadedMap;
+      _currentPage = initialPage;
       _isLoadingData = false;
     });
   }
@@ -160,7 +171,10 @@ class _QuranScreenState extends State<QuranScreen>
 
     String headerSurah = 'الختمة';
     if (pageData != null && pageData.verses.isNotEmpty) {
-      headerSurah = pageData.verses.first.surahName;
+      final firstSurah = pageData.verses.first.surahName.trim();
+      headerSurah = firstSurah.isNotEmpty
+          ? firstSurah
+          : 'سورة ${pageData.verses.first.surahNumber}';
     }
 
     return Container(
@@ -259,14 +273,18 @@ class _QuranScreenState extends State<QuranScreen>
 
   Widget _buildVersesRichText(List<QuranVerseItem> verses, Color primaryColor) {
     final List<InlineSpan> spans = <InlineSpan>[];
-    String? currentSurah;
+    int? currentSurahNumber;
 
     for (final verse in verses) {
-      if (verse.surahName.isNotEmpty && verse.surahName != currentSurah) {
-        currentSurah = verse.surahName;
+      final surahLabel = verse.surahName.trim().isNotEmpty
+          ? 'سورة ${verse.surahName.trim()}'
+          : 'سورة ${verse.surahNumber}';
+
+      if (verse.surahNumber != currentSurahNumber) {
+        currentSurahNumber = verse.surahNumber;
         spans.add(
           TextSpan(
-            text: '\nسورة ${verse.surahName}\n',
+            text: '\n$surahLabel\n',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 15,
