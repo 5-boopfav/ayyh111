@@ -108,18 +108,6 @@ class _HomePrayerScreenState extends State<HomePrayerScreen> {
   @override
   Widget build(BuildContext context) {
     final todayPrayers = _computePrayerTimes(_now);
-    Prayer nextPrayer = todayPrayers.nextPrayer(_now);
-    DateTime? nextPrayerTime = todayPrayers.timeForPrayer(nextPrayer);
-
-    if (nextPrayer == Prayer.none || nextPrayerTime == null) {
-      final tomorrow = _now.add(const Duration(days: 1));
-      final tomorrowPrayers = _computePrayerTimes(tomorrow);
-      nextPrayer = Prayer.fajr;
-      nextPrayerTime = tomorrowPrayers.fajr;
-    }
-
-    final remaining = nextPrayerTime.difference(_now);
-
     final mainPrayers = <Prayer>[
       Prayer.fajr,
       Prayer.dhuhr,
@@ -127,6 +115,27 @@ class _HomePrayerScreenState extends State<HomePrayerScreen> {
       Prayer.maghrib,
       Prayer.isha,
     ];
+
+    Prayer nextPrayer = Prayer.fajr;
+    DateTime? nextPrayerTime;
+
+    for (final p in mainPrayers) {
+      final t = todayPrayers.timeForPrayer(p);
+      if (t != null && t.isAfter(_now)) {
+        nextPrayer = p;
+        nextPrayerTime = t;
+        break;
+      }
+    }
+
+    if (nextPrayerTime == null) {
+      final tomorrow = _now.add(const Duration(days: 1));
+      final tomorrowPrayers = _computePrayerTimes(tomorrow);
+      nextPrayer = Prayer.fajr;
+      nextPrayerTime = tomorrowPrayers.fajr;
+    }
+
+    final remaining = nextPrayerTime.difference(_now);
 
     return Scaffold(
       appBar: AppBar(
