@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../models/islamic_models.dart';
 
 class QuranScreen extends StatefulWidget {
   const QuranScreen({super.key});
@@ -8,43 +9,66 @@ class QuranScreen extends StatefulWidget {
   State<QuranScreen> createState() => _QuranScreenState();
 }
 
-class _QuranScreenState extends State<QuranScreen> {
+class _QuranScreenState extends State<QuranScreen>
+    with SingleTickerProviderStateMixin {
   static const int _totalPages = 604;
 
-  late final PageController _pageController;
+  late final AnimationController _turnController;
   int _currentPage = 1;
   int _bookmarkedPage = 1;
   int _dailyWird = 20;
   bool _pageSoundEnabled = true;
-  double _pageOffset = 0.0;
+  bool _turningForward = true;
+  double _dragStartX = 0.0;
+  double _dragStartY = 0.0;
+
+  Map<int, QuranPageData> _pagesMap = const {};
+  bool _isLoadingData = true;
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: 0);
-    _pageController.addListener(_handlePageScroll);
+    _turnController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 520),
+    )..addStatusListener(_onTurnAnimationStatus);
+    _loadLocalPages();
+  }
+
+  Future<void> _loadLocalPages() async {
+    final data = await LocalIslamicRepository.instance.loadQuranPages();
+    if (!mounted) return;
+    setState(() {
+      _pagesMap = data;
+      _isLoadingData = false;
+    });
+  }
+
+  void _onTurnAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed) {
+      setState(() {
+        if (_turningForward && _currentPage < _totalPages) {
+          _currentPage += 1;
+        } else if (!_turningForward && _currentPage > 1) {
+          _currentPage -= 1;
+        }
+      });
+      _playPageTurnSound();
+      _turnController.reset();
+    }
   }
 
   @override
   void dispose() {
-    _pageController.removeListener(_handlePageScroll);
-    _pageController.dispose();
+    _turnController.removeStatusListener(_onTurnAnimationStatus);
+    _turnController.dispose();
     super.dispose();
   }
 
-  void _handlePageScroll() {
-    if (!_pageController.hasClients) return;
-    final page = _pageController.page;
-    if (page != null && mounted) {
-      setState(() {
-        _pageOffset = page;
-      });
-    }
-  }
-
   int get _juz {
-    final value = ((_currentPage - 1) ~/ 20) + 1;
-    return value.clamp(1, 30);
+    final pageData = _pagesMap[_currentPage];
+    if (pageData != null) return pageData.juz.clamp(1, 30);
+    return (((_currentPage - 1) ~/ 20) + 1).clamp(1, 30);
   }
 
   double get _progress {
@@ -57,16 +81,25 @@ class _QuranScreenState extends State<QuranScreen> {
     HapticFeedback.lightImpact();
   }
 
-  void _goToPage(int pageNumber, {bool playSound = true}) {
+  void _triggerTurn({required bool forward}) {
+    if (_turnController.isAnimating) return;
+    if (forward && _currentPage >= _totalPages) return;
+    if (!forward && _currentPage <= 1) return;
+
+    setState(() {
+      _turningForward = forward;
+    });
+    _turnController.forward(from: 0.0);
+  }
+
+  void _goToPage(int pageNumber) {
     final target = pageNumber.clamp(1, _totalPages);
-    if (playSound) {
-      _playPageTurnSound();
-    }
-    _pageController.animateToPage(
-      target - 1,
-      duration: const Duration(milliseconds: 360),
-      curve: Curves.easeInOutCubic,
-    );
+    if (target == _currentPage) return;
+    setState(() {
+      _turningForward = target > _currentPage;
+      _currentPage = target;
+    });
+    _playPageTurnSound();
   }
 
   void _saveBookmark() {
@@ -91,111 +124,185 @@ class _QuranScreenState extends State<QuranScreen> {
     );
   }
 
-  Widget _buildRealisticPage(BuildContext context, int index, Color primaryColor) {
-    final pageNum = index + 1;
-    final juzNum = ((pageNum - 1) ~/ 20) + 1;
-    final delta = index - _pageOffset;
-    final clampedDelta = delta.clamp(-1.0, 1.0);
-    final turnAngle = clampedDelta * 0.42;
-    final shadowOpacity = (clampedDelta.abs() * 0.22).clamp(0.0, 0.22);
+  void _handlePanStart(DragStartDetails details, Size boxSize) {
+    _dragStartX = details.localPosition.dx;
+    _dragStartY = details.localPosition.dy;
+    final inTopQuarter = details.localPosition.dy <= boxSize.height * 0.25;
+    if (inTopQuarter && !_turnController.isAnimating) {
+      setState(() {
+        _turningForward = details.localPosition.dx > boxSize.width * 0.5;
+      });
+    }
+  }
 
-    final transform = Matrix4.identity()
-      ..setEntry(3, 2, 0.0014)
-      ..rotateY(turnAngle);
+  void _handlePanUpdate(DragUpdateDetails details, Size boxSize) {
+    if (_turnController.isAnimating) return;
+    final dx = (details.localPosition.dx - _dragStartX).abs();
+    final dy = (details.localPosition.dy - _dragStartY).abs();
+    final progress =
+        ((dx + dy * 0.5) / (boxSize.width * 0.85)).clamp(0.0, 1.0);
+    _turnController.value = progress;
+  }
 
-    return Transform(
-      alignment: clampedDelta <= 0 ? Alignment.centerRight : Alignment.centerLeft,
-      transform: transform,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFFDF6),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: const Color(0xFFC9A86A).withValues(alpha: 0.75),
-            width: 1.6,
+  void _handlePanEnd(DragEndDetails details) {
+    if (_turnController.isAnimating) return;
+    if (_turnController.value >= 0.35) {
+      _turnController.forward();
+    } else {
+      _turnController.reverse();
+    }
+  }
+
+  Widget _buildPageContent(int pageNumber, Color primaryColor) {
+    final pageData = _pagesMap[pageNumber];
+    final juzNum =
+        pageData?.juz ?? (((pageNumber - 1) ~/ 20) + 1).clamp(1, 30);
+
+    String headerSurah = 'الختمة';
+    if (pageData != null && pageData.verses.isNotEmpty) {
+      headerSurah = pageData.verses.first.surahName;
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFDF6),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFFC9A86A).withValues(alpha: 0.8),
+          width: 1.6,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08 + shadowOpacity),
-              blurRadius: 12,
-              offset: Offset(clampedDelta * -6, 4),
+        ],
+      ),
+      child: Container(
+        margin: const EdgeInsets.all(6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: const Color(0xFFD9BE8C).withValues(alpha: 0.65),
+          ),
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'الجزء $juzNum',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF5D4B2B),
+                  ),
+                ),
+                Text(
+                  headerSurah,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: primaryColor,
+                  ),
+                ),
+                Text(
+                  'صفحة $pageNumber',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF5D4B2B),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 14, color: Color(0xFFE6D5B0)),
+            Expanded(
+              child: _isLoadingData
+                  ? const Center(child: CircularProgressIndicator())
+                  : (pageData == null || pageData.verses.isEmpty)
+                      ? Center(
+                          child: Text(
+                            'بانتظار إضافة ملف البيانات المحلي الموثوق (assets/data/quran_pages.json) لعرض الصفحة $pageNumber كاملة بدون إنترنت.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade700,
+                              height: 1.6,
+                            ),
+                          ),
+                        )
+                      : SingleChildScrollView(
+                          child: _buildVersesRichText(
+                            pageData.verses,
+                            primaryColor,
+                          ),
+                        ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '$pageNumber',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF5D4B2B),
+              ),
             ),
           ],
         ),
-        child: Container(
-          margin: const EdgeInsets.all(6),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: const Color(0xFFD9BE8C).withValues(alpha: 0.6),
+      ),
+    );
+  }
+
+  Widget _buildVersesRichText(List<QuranVerseItem> verses, Color primaryColor) {
+    final List<InlineSpan> spans = [];
+    String? currentSurah;
+
+    for (final verse in verses) {
+      if (verse.surahName.isNotEmpty && verse.surahName != currentSurah) {
+        currentSurah = verse.surahName;
+        spans.add(
+          TextSpan(
+            text: '\nسورة ${verse.surahName}\n',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+              color: primaryColor,
+              height: 1.8,
             ),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'الجزء $juzNum',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF5D4B2B),
-                    ),
-                  ),
-                  Text(
-                    'صفحة $pageNum',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF5D4B2B),
-                    ),
-                  ),
-                ],
-              ),
-              Column(
-                children: [
-                  Icon(
-                    Icons.auto_stories_rounded,
-                    size: 46,
-                    color: primaryColor,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'مصحف المدينة النبوية — الصفحة $pageNum',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 19,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF2B2418),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'اسحب يميناً أو يساراً لقلب الصفحة كالكتاب',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                '$pageNum',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF5D4B2B),
-                ),
-              ),
-            ],
+        );
+      }
+
+      spans.add(
+        TextSpan(
+          text: '${verse.text} ',
+          style: const TextStyle(
+            fontSize: 17,
+            color: Color(0xFF231D14),
+            height: 1.9,
           ),
         ),
-      ),
+      );
+      spans.add(
+        TextSpan(
+          text: '(${verse.ayahNumber}) ',
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF8A6829),
+          ),
+        ),
+      );
+    }
+
+    return RichText(
+      textAlign: TextAlign.justify,
+      textDirection: TextDirection.rtl,
+      text: TextSpan(children: spans),
     );
   }
 
@@ -203,6 +310,9 @@ class _QuranScreenState extends State<QuranScreen> {
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
     final percentText = (_progress * 100).toStringAsFixed(1);
+    final nextPageNumber = _turningForward
+        ? (_currentPage < _totalPages ? _currentPage + 1 : _currentPage)
+        : (_currentPage > 1 ? _currentPage - 1 : _currentPage);
 
     return Scaffold(
       appBar: AppBar(
@@ -295,18 +405,55 @@ class _QuranScreenState extends State<QuranScreen> {
           ),
           const SizedBox(height: 12),
           SizedBox(
-            height: 290,
-            child: PageView.builder(
-              controller: _pageController,
-              itemCount: _totalPages,
-              onPageChanged: (index) {
-                setState(() {
-                  _currentPage = index + 1;
-                });
-                _playPageTurnSound();
-              },
-              itemBuilder: (context, index) {
-                return _buildRealisticPage(context, index, primaryColor);
+            height: 360,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final boxSize =
+                    Size(constraints.maxWidth, constraints.maxHeight);
+                return GestureDetector(
+                  onPanStart: (details) => _handlePanStart(details, boxSize),
+                  onPanUpdate: (details) => _handlePanUpdate(details, boxSize),
+                  onPanEnd: _handlePanEnd,
+                  child: AnimatedBuilder(
+                    animation: _turnController,
+                    builder: (context, _) {
+                      final t = _turnController.value;
+                      return Stack(
+                        children: [
+                          Positioned.fill(
+                            child: _buildPageContent(
+                              nextPageNumber,
+                              primaryColor,
+                            ),
+                          ),
+                          Positioned.fill(
+                            child: ClipPath(
+                              clipper: _TopQuarterSweepClipper(
+                                progress: t,
+                                forward: _turningForward,
+                              ),
+                              child: _buildPageContent(
+                                _currentPage,
+                                primaryColor,
+                              ),
+                            ),
+                          ),
+                          if (t > 0.01)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: CustomPaint(
+                                  painter: _PageFoldEdgePainter(
+                                    progress: t,
+                                    forward: _turningForward,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                );
               },
             ),
           ),
@@ -316,14 +463,14 @@ class _QuranScreenState extends State<QuranScreen> {
             children: [
               ElevatedButton.icon(
                 onPressed: _currentPage > 1
-                    ? () => _goToPage(_currentPage - 1)
+                    ? () => _triggerTurn(forward: false)
                     : null,
                 icon: const Icon(Icons.chevron_right),
                 label: const Text('الصفحة السابقة'),
               ),
               ElevatedButton.icon(
                 onPressed: _currentPage < _totalPages
-                    ? () => _goToPage(_currentPage + 1)
+                    ? () => _triggerTurn(forward: true)
                     : null,
                 icon: const Icon(Icons.chevron_left),
                 label: const Text('الصفحة التالية'),
@@ -343,7 +490,10 @@ class _QuranScreenState extends State<QuranScreen> {
               children: [
                 Text(
                   'الورد اليومي: $_dailyWird صفحات',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -367,5 +517,89 @@ class _QuranScreenState extends State<QuranScreen> {
         ],
       ),
     );
+  }
+}
+
+class _TopQuarterSweepClipper extends CustomClipper<Path> {
+  final double progress;
+  final bool forward;
+
+  const _TopQuarterSweepClipper({
+    required this.progress,
+    required this.forward,
+  });
+
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    if (progress <= 0.0) {
+      path.addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+      return path;
+    }
+
+    final topQuarterHeight = size.height * 0.25;
+    final sweepX =
+        forward ? size.width * (1.0 - progress) : size.width * progress;
+
+    path.moveTo(0, 0);
+    if (forward) {
+      path.lineTo(sweepX, 0);
+      path.lineTo(sweepX, topQuarterHeight);
+      path.lineTo(size.width, topQuarterHeight);
+    } else {
+      path.lineTo(sweepX, 0);
+      path.lineTo(sweepX, topQuarterHeight);
+      path.lineTo(0, topQuarterHeight);
+    }
+    path.lineTo(size.width, topQuarterHeight);
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant _TopQuarterSweepClipper oldClipper) {
+    return oldClipper.progress != progress || oldClipper.forward != forward;
+  }
+}
+
+class _PageFoldEdgePainter extends CustomPainter {
+  final double progress;
+  final bool forward;
+
+  const _PageFoldEdgePainter({
+    required this.progress,
+    required this.forward,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final topQuarterHeight = size.height * 0.25;
+    final edgeX =
+        forward ? size.width * (1.0 - progress) : size.width * progress;
+
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.14)
+      ..strokeWidth = 6
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawLine(
+      Offset(edgeX, 0),
+      Offset(edgeX, topQuarterHeight),
+      shadowPaint,
+    );
+    canvas.drawLine(
+      Offset(0, topQuarterHeight),
+      Offset(size.width, topQuarterHeight),
+      Paint()
+        ..color = const Color(0xFFC9A86A).withValues(alpha: 0.45)
+        ..strokeWidth = 2,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PageFoldEdgePainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.forward != forward;
   }
 }
