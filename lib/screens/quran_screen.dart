@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/islamic_models.dart';
@@ -20,7 +21,6 @@ class _QuranScreenState extends State<QuranScreen>
   bool _pageSoundEnabled = true;
   bool _turningForward = true;
   double _dragStartX = 0.0;
-  double _dragStartY = 0.0;
 
   Map<int, QuranPageData> _pagesMap = const <int, QuranPageData>{};
   bool _isLoadingData = true;
@@ -30,7 +30,7 @@ class _QuranScreenState extends State<QuranScreen>
     super.initState();
     _turnController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 520),
+      duration: const Duration(milliseconds: 550),
     )..addStatusListener(_onTurnAnimationStatus);
     _loadLocalPages();
   }
@@ -135,33 +135,88 @@ class _QuranScreenState extends State<QuranScreen>
     );
   }
 
-  void _handlePanStart(DragStartDetails details, Size boxSize) {
+  void _handleHorizontalDragStart(DragStartDetails details) {
+    if (_turnController.isAnimating) return;
     _dragStartX = details.localPosition.dx;
-    _dragStartY = details.localPosition.dy;
-    final inTopQuarter = details.localPosition.dy <= boxSize.height * 0.25;
-    if (inTopQuarter && !_turnController.isAnimating) {
-      setState(() {
-        _turningForward = details.localPosition.dx > boxSize.width * 0.5;
-      });
+  }
+
+  void _handleHorizontalDragUpdate(DragUpdateDetails details, double width) {
+    if (_turnController.isAnimating || width <= 0) return;
+    final deltaX = details.localPosition.dx - _dragStartX;
+
+    // السحب لليسار يقلب للصفحة التالية، والسحب لليمين يرجع للصفحة السابقة
+    if (deltaX < 0 && _currentPage < _totalPages) {
+      if (!_turningForward && _turnController.value == 0) {
+        setState(() => _turningForward = true);
+      }
+      if (_turningForward) {
+        _turnController.value = (-deltaX / (width * 0.75)).clamp(0.0, 1.0);
+      }
+    } else if (deltaX > 0 && _currentPage > 1) {
+      if (_turningForward && _turnController.value == 0) {
+        setState(() => _turningForward = false);
+      }
+      if (!_turningForward) {
+        _turnController.value = (deltaX / (width * 0.75)).clamp(0.0, 1.0);
+      }
     }
   }
 
-  void _handlePanUpdate(DragUpdateDetails details, Size boxSize) {
+  void _handleHorizontalDragEnd(DragEndDetails details) {
     if (_turnController.isAnimating) return;
-    final dx = (details.localPosition.dx - _dragStartX).abs();
-    final dy = (details.localPosition.dy - _dragStartY).abs();
-    final progress =
-        ((dx + dy * 0.5) / (boxSize.width * 0.85)).clamp(0.0, 1.0);
-    _turnController.value = progress;
-  }
-
-  void _handlePanEnd(DragEndDetails details) {
-    if (_turnController.isAnimating) return;
-    if (_turnController.value >= 0.35) {
+    final velocity = details.primaryVelocity ?? 0.0;
+    if (_turnController.value >= 0.35 || velocity.abs() > 650) {
       _turnController.forward();
     } else {
       _turnController.reverse();
     }
+  }
+
+  void _openDailyWirdSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'الورد اليومي: $_dailyWird صفحات',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [10, 20, 30, 60].map((pages) {
+                      final selected = _dailyWird == pages;
+                      return ChoiceChip(
+                        label: Text('$pages صفحات'),
+                        selected: selected,
+                        onSelected: (_) {
+                          setState(() => _dailyWird = pages);
+                          setSheetState(() {});
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Widget _buildPageContent(int pageNumber, Color primaryColor) {
@@ -182,24 +237,24 @@ class _QuranScreenState extends State<QuranScreen>
         color: const Color(0xFFFFFDF6),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: const Color(0xFFC9A86A).withValues(alpha: 0.8),
+          color: const Color(0xFFC9A86A).withValues(alpha: 0.85),
           width: 1.6,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 10,
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Container(
         margin: const EdgeInsets.all(6),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: const Color(0xFFD9BE8C).withValues(alpha: 0.65),
+            color: const Color(0xFFD9BE8C).withValues(alpha: 0.7),
           ),
         ),
         child: Column(
@@ -233,7 +288,7 @@ class _QuranScreenState extends State<QuranScreen>
                 ),
               ],
             ),
-            const Divider(height: 14, color: Color(0xFFE6D5B0)),
+            const Divider(height: 12, color: Color(0xFFE6D5B0)),
             Expanded(
               child: _isLoadingData
                   ? const Center(child: CircularProgressIndicator())
@@ -250,13 +305,14 @@ class _QuranScreenState extends State<QuranScreen>
                           ),
                         )
                       : SingleChildScrollView(
+                          padding: const EdgeInsets.only(bottom: 8),
                           child: _buildVersesRichText(
                             pageData.verses,
                             primaryColor,
                           ),
                         ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
               '$pageNumber',
               style: const TextStyle(
@@ -299,9 +355,9 @@ class _QuranScreenState extends State<QuranScreen>
         TextSpan(
           text: '${verse.text} ',
           style: const TextStyle(
-            fontSize: 17,
+            fontSize: 18,
             color: Color(0xFF231D14),
-            height: 1.9,
+            height: 1.95,
           ),
         ),
       );
@@ -324,11 +380,62 @@ class _QuranScreenState extends State<QuranScreen>
     );
   }
 
+  Widget _buildRealisticFlipPage({
+    required double progress,
+    required bool forward,
+    required int targetPage,
+    required Color primaryColor,
+  }) {
+    // زاوية التقليب الواقعية من 0 إلى pi/2 عند منتصف القلب ثم إكمال الصفحة
+    final angle = forward ? -(progress * math.pi) : (progress * math.pi);
+    final isPastHalfway = progress >= 0.5;
+    final shownPage = isPastHalfway ? targetPage : _currentPage;
+    final effectiveAngle = isPastHalfway
+        ? (forward ? (math.pi * (1.0 - progress)) : -(math.pi * (1.0 - progress)))
+        : angle;
+
+    final shadowOpacity = (math.sin(progress * math.pi) * 0.35).clamp(0.0, 0.35);
+
+    final transform = Matrix4.identity()
+      ..setEntry(3, 2, 0.0014)
+      ..rotateY(effectiveAngle);
+
+    return Transform(
+      alignment: forward ? Alignment.centerLeft : Alignment.centerRight,
+      transform: transform,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: _buildPageContent(shownPage, primaryColor),
+          ),
+          if (shadowOpacity > 0.01)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    gradient: LinearGradient(
+                      begin: forward ? Alignment.centerRight : Alignment.centerLeft,
+                      end: forward ? Alignment.centerLeft : Alignment.centerRight,
+                      colors: [
+                        Colors.black.withValues(alpha: shadowOpacity),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
     final percentText = (_progress * 100).toStringAsFixed(1);
-    final nextPageNumber = _turningForward
+    final targetPageNumber = _turningForward
         ? (_currentPage < _totalPages ? _currentPage + 1 : _currentPage)
         : (_currentPage > 1 ? _currentPage - 1 : _currentPage);
 
@@ -339,6 +446,11 @@ class _QuranScreenState extends State<QuranScreen>
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
+          IconButton(
+            tooltip: 'الورد اليومي ($_dailyWird ص)',
+            icon: const Icon(Icons.auto_stories),
+            onPressed: _openDailyWirdSheet,
+          ),
           IconButton(
             tooltip: _pageSoundEnabled ? 'إيقاف صوت القلب' : 'تفعيل صوت القلب',
             icon: Icon(
@@ -362,262 +474,133 @@ class _QuranScreenState extends State<QuranScreen>
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(14),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          child: Column(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
                   children: [
-                    Text(
-                      'الجزء $_juz',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'الجزء $_juz',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: primaryColor,
+                          ),
+                        ),
+                        Text(
+                          'صفحة $_currentPage / $_totalPages',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          '$percentText% • ص $_bookmarkedPage',
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: _progress,
+                        minHeight: 5,
+                        backgroundColor: Colors.grey.shade200,
                         color: primaryColor,
                       ),
                     ),
-                    Text(
-                      'صفحة $_currentPage / $_totalPages',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return GestureDetector(
+                      onHorizontalDragStart: _handleHorizontalDragStart,
+                      onHorizontalDragUpdate: (details) =>
+                          _handleHorizontalDragUpdate(
+                        details,
+                        constraints.maxWidth,
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(
-                    value: _progress,
-                    minHeight: 7,
-                    backgroundColor: Colors.grey.shade200,
-                    color: primaryColor,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'الإنجاز: $percentText%',
-                      style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
-                    ),
-                    Text(
-                      'العلامة: ص $_bookmarkedPage',
-                      style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 360,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final boxSize =
-                    Size(constraints.maxWidth, constraints.maxHeight);
-                return GestureDetector(
-                  onPanStart: (details) => _handlePanStart(details, boxSize),
-                  onPanUpdate: (details) => _handlePanUpdate(details, boxSize),
-                  onPanEnd: _handlePanEnd,
-                  child: AnimatedBuilder(
-                    animation: _turnController,
-                    builder: (context, _) {
-                      final t = _turnController.value;
-                      return Stack(
-                        children: [
-                          Positioned.fill(
-                            child: _buildPageContent(
-                              nextPageNumber,
-                              primaryColor,
-                            ),
-                          ),
-                          Positioned.fill(
-                            child: ClipPath(
-                              clipper: _TopQuarterSweepClipper(
-                                progress: t,
-                                forward: _turningForward,
-                              ),
-                              child: _buildPageContent(
-                                _currentPage,
-                                primaryColor,
-                              ),
-                            ),
-                          ),
-                          if (t > 0.01)
-                            Positioned.fill(
-                              child: IgnorePointer(
-                                child: CustomPaint(
-                                  painter: _PageFoldEdgePainter(
-                                    progress: t,
-                                    forward: _turningForward,
-                                  ),
+                      onHorizontalDragEnd: _handleHorizontalDragEnd,
+                      child: AnimatedBuilder(
+                        animation: _turnController,
+                        builder: (context, _) {
+                          final t = _turnController.value;
+                          return Stack(
+                            children: [
+                              Positioned.fill(
+                                child: _buildPageContent(
+                                  targetPageNumber,
+                                  primaryColor,
                                 ),
                               ),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              ElevatedButton.icon(
-                onPressed: _currentPage > 1
-                    ? () => _triggerTurn(forward: false)
-                    : null,
-                icon: const Icon(Icons.chevron_right),
-                label: const Text('الصفحة السابقة'),
+                              if (t < 1.0)
+                                Positioned.fill(
+                                  child: _buildRealisticFlipPage(
+                                    progress: t,
+                                    forward: _turningForward,
+                                    targetPage: targetPageNumber,
+                                    primaryColor: primaryColor,
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
               ),
-              ElevatedButton.icon(
-                onPressed: _currentPage < _totalPages
-                    ? () => _triggerTurn(forward: true)
-                    : null,
-                icon: const Icon(Icons.chevron_left),
-                label: const Text('الصفحة التالية'),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _currentPage > 1
+                        ? () => _triggerTurn(forward: false)
+                        : null,
+                    icon: const Icon(Icons.chevron_right),
+                    label: const Text('الصفحة السابقة'),
+                  ),
+                  Text(
+                    'اسحب يميناً أو يساراً للتقليب',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _currentPage < _totalPages
+                        ? () => _triggerTurn(forward: true)
+                        : null,
+                    icon: const Icon(Icons.chevron_left),
+                    label: const Text('الصفحة التالية'),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'الورد اليومي: $_dailyWird صفحات',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  children: [10, 20, 30, 60].map((pages) {
-                    final selected = _dailyWird == pages;
-                    return ChoiceChip(
-                      label: Text('$pages صفحات'),
-                      selected: selected,
-                      onSelected: (_) {
-                        setState(() {
-                          _dailyWird = pages;
-                        });
-                      },
-                    );
-                  }).toList(),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
-  }
-}
-
-class _TopQuarterSweepClipper extends CustomClipper<Path> {
-  final double progress;
-  final bool forward;
-
-  const _TopQuarterSweepClipper({
-    required this.progress,
-    required this.forward,
-  });
-
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-    if (progress <= 0.0) {
-      path.addRect(Rect.fromLTWH(0, 0, size.width, size.height));
-      return path;
-    }
-
-    final topQuarterHeight = size.height * 0.25;
-    final sweepX =
-        forward ? size.width * (1.0 - progress) : size.width * progress;
-
-    path.moveTo(0, 0);
-    if (forward) {
-      path.lineTo(sweepX, 0);
-      path.lineTo(sweepX, topQuarterHeight);
-      path.lineTo(size.width, topQuarterHeight);
-    } else {
-      path.lineTo(sweepX, 0);
-      path.lineTo(sweepX, topQuarterHeight);
-      path.lineTo(0, topQuarterHeight);
-    }
-    path.lineTo(size.width, topQuarterHeight);
-    path.lineTo(size.width, size.height);
-    path.lineTo(0, size.height);
-    path.close();
-    return path;
-  }
-
-  @override
-  bool shouldReclip(covariant _TopQuarterSweepClipper oldClipper) {
-    return oldClipper.progress != progress || oldClipper.forward != forward;
-  }
-}
-
-class _PageFoldEdgePainter extends CustomPainter {
-  final double progress;
-  final bool forward;
-
-  const _PageFoldEdgePainter({
-    required this.progress,
-    required this.forward,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final topQuarterHeight = size.height * 0.25;
-    final edgeX =
-        forward ? size.width * (1.0 - progress) : size.width * progress;
-
-    final shadowPaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.14)
-      ..strokeWidth = 6
-      ..style = PaintingStyle.stroke;
-
-    canvas.drawLine(
-      Offset(edgeX, 0),
-      Offset(edgeX, topQuarterHeight),
-      shadowPaint,
-    );
-    canvas.drawLine(
-      Offset(0, topQuarterHeight),
-      Offset(size.width, topQuarterHeight),
-      Paint()
-        ..color = const Color(0xFFC9A86A).withValues(alpha: 0.45)
-        ..strokeWidth = 2,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _PageFoldEdgePainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.forward != forward;
   }
 }
