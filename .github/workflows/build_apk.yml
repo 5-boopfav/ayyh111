@@ -25,14 +25,34 @@ jobs:
           channel: 'stable'
           flutter-version: '3.27.1'
 
+      - name: Prepare clean Flutter Android project
+        run: |
+          if [ ! -f "pubspec.yaml" ] || [ ! -f "lib/main.dart" ]; then
+            echo "Missing pubspec.yaml or lib/main.dart"
+            exit 1
+          fi
+          rm -rf /tmp/flutter_app
+          flutter create -t app --platforms=android --project-name youmk_binour_allah /tmp/flutter_app
+          cp pubspec.yaml /tmp/flutter_app/pubspec.yaml
+          rm -rf /tmp/flutter_app/lib
+          cp -r lib /tmp/flutter_app/lib
+
       - name: Install dependencies
+        working-directory: /tmp/flutter_app
         run: flutter pub get
 
       - name: Analyze code
+        working-directory: /tmp/flutter_app
         run: flutter analyze
 
       - name: Build Debug APK
+        working-directory: /tmp/flutter_app
         run: flutter build apk --debug
+
+      - name: Copy APK to workspace
+        run: |
+          mkdir -p build/app/outputs/flutter-apk
+          cp /tmp/flutter_app/build/app/outputs/flutter-apk/app-debug.apk build/app/outputs/flutter-apk/app-debug.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
