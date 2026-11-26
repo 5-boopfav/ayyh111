@@ -5,14 +5,13 @@ class _ZikrItem {
   final String title;
   final String text;
   final int targetCount;
-  int currentCount;
+  int currentCount = 0;
 
   _ZikrItem({
     required this.category,
     required this.title,
     required this.text,
     required this.targetCount,
-    this.currentCount = 0,
   });
 }
 
