@@ -66,7 +66,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  initialValue: _selectedCity,
+                  value: _selectedCity,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     isDense: true,
@@ -94,7 +94,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  initialValue: _selectedMethod,
+                  value: _selectedMethod,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     isDense: true,
