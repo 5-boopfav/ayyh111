@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'screens/azkar_screen.dart';
 import 'screens/home_screen.dart';
 
 void main() {
@@ -55,11 +56,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
 
   late final List<Widget> _pages = [
     const HomePrayerScreen(),
-    const _PlaceholderTab(
-      title: 'حصن المسلم والأذكار',
-      subtitle: 'أذكار الصباح والمساء وعداد التسبيح التفاعلي',
-      icon: Icons.favorite_border,
-    ),
+    const AzkarScreen(),
     const _PlaceholderTab(
       title: 'الختمة',
       subtitle: 'متابعة صفحات المصحف وحفظ آخر موضع قراءة',
