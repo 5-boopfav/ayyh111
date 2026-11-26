@@ -36,7 +36,7 @@ class QuranPageData {
   });
 
   factory QuranPageData.fromJson(Map<String, dynamic> json) {
-    final rawVerses = (json['verses'] as List<dynamic>?) ?? const [];
+    final rawVerses = (json['verses'] as List<dynamic>?) ?? const <dynamic>[];
     return QuranPageData(
       page: (json['page'] as num?)?.toInt() ?? 1,
       juz: (json['juz'] as num?)?.toInt() ?? 1,
@@ -83,7 +83,7 @@ class AzkarChapter {
   });
 
   factory AzkarChapter.fromJson(Map<String, dynamic> json) {
-    final rawItems = (json['items'] as List<dynamic>?) ?? const [];
+    final rawItems = (json['items'] as List<dynamic>?) ?? const <dynamic>[];
     return AzkarChapter(
       id: (json['id'] as String?) ?? '',
       title: (json['title'] as String?) ?? '',
@@ -109,7 +109,7 @@ class LocalIslamicRepository {
       final rawString =
           await rootBundle.loadString('assets/data/quran_pages.json');
       final decoded = jsonDecode(rawString);
-      final Map<int, QuranPageData> pagesMap = {};
+      final Map<int, QuranPageData> pagesMap = <int, QuranPageData>{};
 
       if (decoded is List) {
         for (final entry in decoded) {
@@ -134,7 +134,7 @@ class LocalIslamicRepository {
       final rawString =
           await rootBundle.loadString('assets/data/hisn_al_muslim.json');
       final decoded = jsonDecode(rawString);
-      final List<AzkarChapter> chapters = [];
+      final List<AzkarChapter> chapters = <AzkarChapter>[];
 
       if (decoded is List) {
         for (final entry in decoded) {
