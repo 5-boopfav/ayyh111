@@ -23,10 +23,6 @@ class BahmadMushafApp extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// بيانات السور والأجزاء والورد اليومي
-// ============================================================================
-
 class SurahInfo {
   final int number;
   final String name;
@@ -203,10 +199,6 @@ const List<JuzInfo> kJuzList = [
   JuzInfo(number: 30, title: 'الجزء الثلاثون', startPage: 582),
 ];
 
-// ============================================================================
-// الشاشة الرئيسية لقراءة المصحف (استجابة مباشرة وتبسيط واضح للانثناء)
-// ============================================================================
-
 class MushafReaderScreen extends StatefulWidget {
   const MushafReaderScreen({super.key});
 
@@ -226,42 +218,67 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   bool _nightMode = false;
   double _pageScale = 1.0;
 
-  // تتبع مباشر وسريع لإصبع المستخدم
-  int? _activePointer;
+  // تتبع السحب المباشر
+  int? _pointerId;
   double _startX = 0.0;
   double _lastX = 0.0;
   int _lastTimeMs = 0;
   double _vx = 0.0;
-  double _pointerDyRatio = 0.5;
+  double _dyRatio = 0.5;
 
   // -1 للانتقال للصفحة التالية (سحب لليسار)، +1 للرجوع للسابقة (سحب لليمين)
-  int _dragDirection = 0;
-  double _dragProgress = 0.0;
-  bool _isSettling = false;
-  bool _willCommit = false;
+  int _dragDir = 0;
+  double _progress = 0.0;
+  bool _settling = false;
+  bool _commit = false;
 
-  late final AnimationController _settleController;
+  late final AnimationController _settleCtrl;
   Animation<double>? _settleAnim;
 
   @override
   void initState() {
     super.initState();
-    _settleController = AnimationController(
+    _settleCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 210),
+      duration: const Duration(milliseconds: 220),
     )
-      ..addListener(_onSettleTick)
-      ..addStatusListener(_onSettleDone);
+      ..addListener(() {
+        if (_settleAnim != null) {
+          setState(() {
+            _progress = _settleAnim!.value.clamp(0.0, 1.0);
+          });
+        }
+      })
+      ..addStatusListener((status) {
+        if (status == AnimationStatus.completed) {
+          final int finishedDir = _dragDir;
+          final bool didCommit = _commit;
+          setState(() {
+            if (didCommit && finishedDir != 0) {
+              final int nextPage = (_currentPage - finishedDir).clamp(1, totalPages);
+              if (nextPage != _currentPage) {
+                _currentPage = nextPage;
+                _advanceWirdOnce();
+              }
+            }
+            _dragDir = 0;
+            _progress = 0.0;
+            _settling = false;
+            _commit = false;
+          });
+          _saveState();
+        }
+      });
 
-    _loadSavedState();
+    _loadState();
   }
 
-  Future<void> _loadSavedState() async {
+  Future<void> _loadState() async {
     final prefs = await SharedPreferences.getInstance();
-    final todayKey = _todayDateKey();
-    final savedDate = prefs.getString('last_wird_date') ?? todayKey;
-    final savedWirdCount =
-        savedDate == todayKey ? (prefs.getInt('wird_read_today') ?? 0) : 0;
+    final today = _todayKey();
+    final savedDate = prefs.getString('last_wird_date') ?? today;
+    final savedWird =
+        savedDate == today ? (prefs.getInt('wird_read_today') ?? 0) : 0;
 
     if (!mounted) return;
     setState(() {
@@ -270,20 +287,17 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       _nightMode = prefs.getBool('night_mode') ?? false;
       _pageScale = (prefs.getDouble('page_scale') ?? 1.0).clamp(0.9, 1.25);
       _dailyWirdGoalPages = prefs.getInt('daily_wird_goal') ?? 20;
-      _lastWirdDate = todayKey;
-      _wirdReadToday = savedWirdCount;
+      _lastWirdDate = today;
+      _wirdReadToday = savedWird;
     });
-
-    await prefs.setString('last_wird_date', todayKey);
-    await prefs.setInt('wird_read_today', _wirdReadToday);
   }
 
-  String _todayDateKey() {
+  String _todayKey() {
     final now = DateTime.now();
     return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
 
-  Future<void> _persistPreferences() async {
+  Future<void> _saveState() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('current_page', _currentPage);
     if (_bookmarkedPage != null) {
@@ -298,37 +312,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     await prefs.setInt('wird_read_today', _wirdReadToday);
   }
 
-  void _onSettleTick() {
-    if (_settleAnim == null) return;
-    setState(() {
-      _dragProgress = _settleAnim!.value.clamp(0.0, 1.0);
-    });
-  }
-
-  void _onSettleDone(AnimationStatus status) {
-    if (status == AnimationStatus.completed) {
-      final int dir = _dragDirection;
-      final bool commit = _willCommit;
-
-      setState(() {
-        if (commit && dir != 0) {
-          final int nextPage = (_currentPage - dir).clamp(1, totalPages);
-          if (nextPage != _currentPage) {
-            _currentPage = nextPage;
-            _registerWirdProgress();
-          }
-        }
-        _dragDirection = 0;
-        _dragProgress = 0.0;
-        _isSettling = false;
-        _willCommit = false;
-      });
-      _persistPreferences();
-    }
-  }
-
-  void _registerWirdProgress() {
-    final today = _todayDateKey();
+  void _advanceWirdOnce() {
+    final today = _todayKey();
     if (_lastWirdDate != today) {
       _lastWirdDate = today;
       _wirdReadToday = 0;
@@ -339,68 +324,63 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   }
 
   void _jumpToPage(int page) {
-    final int target = page.clamp(1, totalPages);
-    if (_settleController.isAnimating) {
-      _settleController.stop();
+    if (_settleCtrl.isAnimating) {
+      _settleCtrl.stop();
     }
     setState(() {
-      _activePointer = null;
-      _dragDirection = 0;
-      _dragProgress = 0.0;
-      _isSettling = false;
-      _willCommit = false;
-      _currentPage = target;
+      _pointerId = null;
+      _dragDir = 0;
+      _progress = 0.0;
+      _settling = false;
+      _commit = false;
+      _currentPage = page.clamp(1, totalPages);
     });
-    _persistPreferences();
+    _saveState();
   }
 
   void _toggleBookmark() {
     setState(() {
-      if (_bookmarkedPage == _currentPage) {
-        _bookmarkedPage = null;
-      } else {
-        _bookmarkedPage = _currentPage;
-      }
+      _bookmarkedPage = _bookmarkedPage == _currentPage ? null : _currentPage;
     });
-    _persistPreferences();
+    _saveState();
   }
 
   void _handlePointerDown(PointerDownEvent event, double height) {
-    if (_isSettling) return;
-    if (_settleController.isAnimating) {
-      _settleController.stop();
+    if (_settling) return;
+    if (_settleCtrl.isAnimating) {
+      _settleCtrl.stop();
     }
     setState(() {
-      _activePointer = event.pointer;
+      _pointerId = event.pointer;
       _startX = event.localPosition.dx;
       _lastX = event.localPosition.dx;
       _lastTimeMs = DateTime.now().millisecondsSinceEpoch;
       _vx = 0.0;
-      _pointerDyRatio =
-          height > 0 ? (event.localPosition.dy / height).clamp(0.05, 0.95) : 0.5;
-      _dragDirection = 0;
-      _dragProgress = 0.0;
+      _dyRatio =
+          height > 0 ? (event.localPosition.dy / height).clamp(0.08, 0.92) : 0.5;
+      _dragDir = 0;
+      _progress = 0.0;
     });
   }
 
   void _handlePointerMove(PointerMoveEvent event, double width, double height) {
-    if (_isSettling || width <= 0) return;
-    if (_activePointer != null && event.pointer != _activePointer) return;
+    if (_settling || width <= 0) return;
+    if (_pointerId != null && event.pointer != _pointerId) return;
 
-    final int nowMs = DateTime.now().millisecondsSinceEpoch;
-    final int dt = nowMs - _lastTimeMs;
+    final int now = DateTime.now().millisecondsSinceEpoch;
+    final int dt = now - _lastTimeMs;
     if (dt > 0) {
       _vx = ((event.localPosition.dx - _lastX) * 1000.0) / dt;
     }
     _lastX = event.localPosition.dx;
-    _lastTimeMs = nowMs;
+    _lastTimeMs = now;
 
     final double dx = event.localPosition.dx - _startX;
-    final double dyRatio =
-        height > 0 ? (event.localPosition.dy / height).clamp(0.05, 0.95) : 0.5;
+    final double ratioY =
+        height > 0 ? (event.localPosition.dy / height).clamp(0.08, 0.92) : 0.5;
 
-    int dir = _dragDirection;
-    if (dir == 0 && dx.abs() > 0.5) {
+    int dir = _dragDir;
+    if (dir == 0 && dx.abs() > 2.0) {
       final int candidate = dx < 0 ? -1 : 1;
       final int target = _currentPage - candidate;
       if (target >= 1 && target <= totalPages) {
@@ -409,71 +389,63 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     }
 
     if (dir == 0) {
-      setState(() {
-        _pointerDyRatio = dyRatio;
-      });
+      setState(() => _dyRatio = ratioY);
       return;
     }
 
-    // استجابة مباشرة ولحظية: أي تحريك يغيّر الانثناء فوراً ويبقى عند التوقف
+    // نسبة حركة واضحة ومباشرة تتبع الإصبع وتبقى معلّقة عند توقفه
     final double raw = ((-dx * dir) / (width * 0.65)).clamp(0.0, 1.0);
-    final double progress = raw < 0.02 ? 0.02 : raw;
-
     setState(() {
-      _dragDirection = dir;
-      _pointerDyRatio = dyRatio;
-      _dragProgress = progress;
+      _dragDir = dir;
+      _dyRatio = ratioY;
+      _progress = raw;
     });
   }
 
-  void _handlePointerUpOrCancel(int pointer) {
-    if (_activePointer != null && pointer != _activePointer) return;
-    _activePointer = null;
+  void _handlePointerEnd(int pointer) {
+    if (_pointerId != null && pointer != _pointerId) return;
+    _pointerId = null;
+    if (_settling || _dragDir == 0) return;
 
-    if (_isSettling || _dragDirection == 0) return;
-
-    final double dirVel = -_vx * _dragDirection;
-    final bool commit = _dragProgress >= 0.35 || dirVel > 380;
-    _animateSettle(commit);
+    final double directionalSpeed = -_vx * _dragDir;
+    final bool shouldCommit = _progress >= 0.35 || directionalSpeed > 360;
+    _runSettle(shouldCommit);
   }
 
-  void _animateSettle(bool commit) {
-    _willCommit = commit;
-    _isSettling = true;
+  void _runSettle(bool commit) {
+    _commit = commit;
+    _settling = true;
     _settleAnim = Tween<double>(
-      begin: _dragProgress,
+      begin: _progress,
       end: commit ? 1.0 : 0.0,
     ).animate(
-      CurvedAnimation(
-        parent: _settleController,
-        curve: Curves.easeOutCubic,
-      ),
+      CurvedAnimation(parent: _settleCtrl, curve: Curves.easeOutCubic),
     );
-    _settleController.forward(from: 0.0);
+    _settleCtrl.forward(from: 0.0);
   }
 
   SurahInfo get _currentSurah {
-    SurahInfo current = kSurahs.first;
+    SurahInfo res = kSurahs.first;
     for (final s in kSurahs) {
       if (s.startPage <= _currentPage) {
-        current = s;
+        res = s;
       } else {
         break;
       }
     }
-    return current;
+    return res;
   }
 
   JuzInfo get _currentJuz {
-    JuzInfo current = kJuzList.first;
+    JuzInfo res = kJuzList.first;
     for (final j in kJuzList) {
       if (j.startPage <= _currentPage) {
-        current = j;
+        res = j;
       } else {
         break;
       }
     }
-    return current;
+    return res;
   }
 
   @override
@@ -485,10 +457,9 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     final Color accentColor =
         _nightMode ? const Color(0xFFD4AF37) : const Color(0xFF8C6223);
 
-    final bool activeCurl = _dragDirection != 0 && _dragProgress > 0.0;
-    final int underPageNumber = activeCurl
-        ? (_currentPage - _dragDirection).clamp(1, totalPages)
-        : _currentPage;
+    final bool activeCurl = _dragDir != 0 && _progress > 0.001;
+    final int underPage =
+        activeCurl ? (_currentPage - _dragDir).clamp(1, totalPages) : _currentPage;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -543,7 +514,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
             ),
             onPressed: () {
               setState(() => _nightMode = !_nightMode);
-              _persistPreferences();
+              _saveState();
             },
           ),
         ],
@@ -557,32 +528,32 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                 final double height = constraints.maxHeight;
 
                 return Listener(
-                  behavior: HitTestBehavior.translucent,
+                  behavior: HitTestBehavior.opaque,
                   onPointerDown: (e) => _handlePointerDown(e, height),
                   onPointerMove: (e) => _handlePointerMove(e, width, height),
-                  onPointerUp: (e) => _handlePointerUpOrCancel(e.pointer),
-                  onPointerCancel: (e) => _handlePointerUpOrCancel(e.pointer),
+                  onPointerUp: (e) => _handlePointerEnd(e.pointer),
+                  onPointerCancel: (e) => _handlePointerEnd(e.pointer),
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      // الصفحة الثابتة تحت الورقة المنثنية وتتكشف تدريجياً
+                      // 1. الصفحة الثابتة تحت الورقة المنثنية
                       if (activeCurl)
-                        _buildStaticUnderPage(
-                          pageNumber: underPageNumber,
+                        _UnderPageLayer(
+                          pageNumber: underPage,
                           nightMode: _nightMode,
                           scale: _pageScale,
-                          progress: _dragProgress,
+                          progress: _progress,
                         ),
 
-                      // الورقة المنثنية نفسها (عطف مائل + تقوّس + ظل + ظهر الورقة معكوس)
-                      _buildCurledSheet(
+                      // 2. الورقة المنثنية (تحريك مباشر + قصّ مائل مقوّس + ظل + ظهر الورقة معكوساً)
+                      _ActiveCurledSheet(
                         currentPage: _currentPage,
-                        backPage: underPageNumber,
+                        backPage: underPage,
                         width: width,
                         height: height,
-                        dragDirection: activeCurl ? _dragDirection : 0,
-                        progress: activeCurl ? _dragProgress : 0.0,
-                        pointerDyRatio: _pointerDyRatio,
+                        direction: activeCurl ? _dragDir : 0,
+                        progress: activeCurl ? _progress : 0.0,
+                        dyRatio: _dyRatio,
                         nightMode: _nightMode,
                         scale: _pageScale,
                       ),
@@ -592,222 +563,29 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
               },
             ),
           ),
-          _buildBottomNavigationBar(textColor, accentColor, bgColor),
+          _BottomBar(
+            textColor: textColor,
+            accentColor: accentColor,
+            bgColor: bgColor,
+            wirdRead: _wirdReadToday,
+            wirdGoal: _dailyWirdGoalPages,
+            onOpenSurahs: _openSurahs,
+            onOpenJuz: _openJuz,
+            onOpenWird: _openWird,
+            onOpenScale: _openScale,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildStaticUnderPage({
-    required int pageNumber,
-    required bool nightMode,
-    required double scale,
-    required double progress,
-  }) {
-    final double shadowAlpha = (0.18 * (1.0 - progress)).clamp(0.0, 0.22);
-
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        MushafSingleSheet(
-          pageNumber: pageNumber,
-          nightMode: nightMode,
-          scale: scale,
-        ),
-        IgnorePointer(
-          child: Container(
-            color: Colors.black.withValues(alpha: shadowAlpha),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCurledSheet({
-    required int currentPage,
-    required int backPage,
-    required double width,
-    required double height,
-    required int dragDirection,
-    required double progress,
-    required double pointerDyRatio,
-    required bool nightMode,
-    required double scale,
-  }) {
-    if (dragDirection == 0 || progress <= 0.0) {
-      return MushafSingleSheet(
-        pageNumber: currentPage,
-        nightMode: nightMode,
-        scale: scale,
-      );
-    }
-
-    final _CurlGeometry geom = _CurlGeometry.compute(
-      size: Size(width, height),
-      dragDirection: dragDirection,
-      progress: progress,
-      pointerDyRatio: pointerDyRatio,
-    );
-
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // ظل ناعم على الصفحة التي تحت الورقة بمحاذاة خط العطف
-        IgnorePointer(
-          child: CustomPaint(
-            size: Size(width, height),
-            painter: _UnderCreaseShadowPainter(
-              geometry: geom,
-              progress: progress,
-              nightMode: nightMode,
-            ),
-          ),
-        ),
-
-        // الجزء غير المنعطف من الورقة الحالية
-        ClipPath(
-          clipper: _RemainingSheetClipper(geometry: geom),
-          child: MushafSingleSheet(
-            pageNumber: currentPage,
-            nightMode: nightMode,
-            scale: scale,
-          ),
-        ),
-
-        // ظهر الورقة المنثنية (يظهر الصفحة التالية معكوسة وناعمة ضمن الجزء المعطوف فقط)
-        ClipPath(
-          clipper: _FoldedFlapClipper(geometry: geom),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Transform(
-                alignment: Alignment.center,
-                transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
-                child: Opacity(
-                  opacity: nightMode ? 0.42 : 0.56,
-                  child: MushafSingleSheet(
-                    pageNumber: backPage,
-                    nightMode: nightMode,
-                    scale: scale,
-                  ),
-                ),
-              ),
-              IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: (nightMode
-                            ? const Color(0xFF1A1E24)
-                            : const Color(0xFFF3EAD8))
-                        .withValues(alpha: nightMode ? 0.52 : 0.44),
-                  ),
-                ),
-              ),
-              IgnorePointer(
-                child: CustomPaint(
-                  size: Size(width, height),
-                  painter: _FlapShadingAndCreasePainter(
-                    geometry: geom,
-                    progress: progress,
-                    nightMode: nightMode,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBottomNavigationBar(
-    Color textColor,
-    Color accentColor,
-    Color bgColor,
-  ) {
-    final double wirdRatio = _dailyWirdGoalPages > 0
-        ? (_wirdReadToday / _dailyWirdGoalPages).clamp(0.0, 1.0)
-        : 0.0;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: bgColor,
-        border: Border(
-          top: BorderSide(color: textColor.withValues(alpha: 0.12)),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Text(
-                  'الورد اليومي: $_wirdReadToday / $_dailyWirdGoalPages صفحة',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: textColor.withValues(alpha: 0.85),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: LinearProgressIndicator(
-                      value: wirdRatio,
-                      minHeight: 6,
-                      backgroundColor: textColor.withValues(alpha: 0.12),
-                      valueColor: AlwaysStoppedAnimation<Color>(accentColor),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _NavActionButton(
-                  icon: Icons.menu_book_outlined,
-                  label: 'الفهرس',
-                  color: textColor,
-                  onTap: _openSurahIndexSheet,
-                ),
-                _NavActionButton(
-                  icon: Icons.grid_view_outlined,
-                  label: 'الأجزاء',
-                  color: textColor,
-                  onTap: _openJuzSheet,
-                ),
-                _NavActionButton(
-                  icon: Icons.track_changes_outlined,
-                  label: 'الورد',
-                  color: textColor,
-                  onTap: _openWirdSettingsDialog,
-                ),
-                _NavActionButton(
-                  icon: Icons.zoom_in_outlined,
-                  label: 'الحجم',
-                  color: textColor,
-                  onTap: _openScaleSheet,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _openSurahIndexSheet() {
+  void _openSurahs() {
     showModalBottomSheet(
       context: context,
       backgroundColor:
           _nightMode ? const Color(0xFF1A1D22) : const Color(0xFFFAF5EA),
       builder: (ctx) {
-        final Color fg =
-            _nightMode ? const Color(0xFFE7DFC8) : const Color(0xFF231F1A);
+        final fg = _nightMode ? const Color(0xFFE7DFC8) : const Color(0xFF231F1A);
         return Directionality(
           textDirection: TextDirection.rtl,
           child: Column(
@@ -816,11 +594,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                 padding: const EdgeInsets.all(14),
                 child: Text(
                   'فهرس السور',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: fg,
-                  ),
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: fg),
                 ),
               ),
               Expanded(
@@ -828,34 +602,19 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                   itemCount: kSurahs.length,
                   separatorBuilder: (_, __) =>
                       Divider(height: 1, color: fg.withValues(alpha: 0.1)),
-                  itemBuilder: (_, index) {
-                    final surah = kSurahs[index];
+                  itemBuilder: (_, i) {
+                    final s = kSurahs[i];
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: fg.withValues(alpha: 0.12),
-                        child: Text(
-                          '${surah.number}',
-                          style: TextStyle(color: fg, fontSize: 13),
-                        ),
+                        child: Text('${s.number}', style: TextStyle(color: fg, fontSize: 13)),
                       ),
-                      title: Text(
-                        surah.name,
-                        style: TextStyle(
-                          color: fg,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      subtitle: Text(
-                        surah.revelationType,
-                        style: TextStyle(color: fg.withValues(alpha: 0.65)),
-                      ),
-                      trailing: Text(
-                        'ص ${surah.startPage}',
-                        style: TextStyle(color: fg.withValues(alpha: 0.8)),
-                      ),
+                      title: Text(s.name, style: TextStyle(color: fg, fontWeight: FontWeight.w600)),
+                      subtitle: Text(s.revelationType, style: TextStyle(color: fg.withValues(alpha: 0.65))),
+                      trailing: Text('ص ${s.startPage}', style: TextStyle(color: fg.withValues(alpha: 0.8))),
                       onTap: () {
                         Navigator.pop(ctx);
-                        _jumpToPage(surah.startPage);
+                        _jumpToPage(s.startPage);
                       },
                     );
                   },
@@ -868,14 +627,13 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     );
   }
 
-  void _openJuzSheet() {
+  void _openJuz() {
     showModalBottomSheet(
       context: context,
       backgroundColor:
           _nightMode ? const Color(0xFF1A1D22) : const Color(0xFFFAF5EA),
       builder: (ctx) {
-        final Color fg =
-            _nightMode ? const Color(0xFFE7DFC8) : const Color(0xFF231F1A);
+        final fg = _nightMode ? const Color(0xFFE7DFC8) : const Color(0xFF231F1A);
         return Directionality(
           textDirection: TextDirection.rtl,
           child: Column(
@@ -884,11 +642,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                 padding: const EdgeInsets.all(14),
                 child: Text(
                   'أجزاء المصحف الثلاثون',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: fg,
-                  ),
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: fg),
                 ),
               ),
               Expanded(
@@ -896,30 +650,18 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                   itemCount: kJuzList.length,
                   separatorBuilder: (_, __) =>
                       Divider(height: 1, color: fg.withValues(alpha: 0.1)),
-                  itemBuilder: (_, index) {
-                    final juz = kJuzList[index];
+                  itemBuilder: (_, i) {
+                    final j = kJuzList[i];
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: fg.withValues(alpha: 0.12),
-                        child: Text(
-                          '${juz.number}',
-                          style: TextStyle(color: fg, fontSize: 13),
-                        ),
+                        child: Text('${j.number}', style: TextStyle(color: fg, fontSize: 13)),
                       ),
-                      title: Text(
-                        juz.title,
-                        style: TextStyle(
-                          color: fg,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      trailing: Text(
-                        'تبدأ من ص ${juz.startPage}',
-                        style: TextStyle(color: fg.withValues(alpha: 0.8)),
-                      ),
+                      title: Text(j.title, style: TextStyle(color: fg, fontWeight: FontWeight.w600)),
+                      trailing: Text('تبدأ من ص ${j.startPage}', style: TextStyle(color: fg.withValues(alpha: 0.8))),
                       onTap: () {
                         Navigator.pop(ctx);
-                        _jumpToPage(juz.startPage);
+                        _jumpToPage(j.startPage);
                       },
                     );
                   },
@@ -932,109 +674,93 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     );
   }
 
-  void _openWirdSettingsDialog() {
+  void _openWird() {
     int tempGoal = _dailyWirdGoalPages;
     showDialog(
       context: context,
-      builder: (ctx) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: StatefulBuilder(
-            builder: (context, setLocalState) {
-              return AlertDialog(
-                title: const Text('إعداد الورد اليومي'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('الهدف اليومي: $tempGoal صفحة'),
-                    Slider(
-                      min: 1,
-                      max: 60,
-                      divisions: 59,
-                      value: tempGoal.toDouble(),
-                      onChanged: (val) {
-                        setLocalState(() => tempGoal = val.round());
-                      },
-                    ),
-                  ],
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: StatefulBuilder(
+          builder: (context, setLocal) => AlertDialog(
+            title: const Text('إعداد الورد اليومي'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('الهدف اليومي: $tempGoal صفحة'),
+                Slider(
+                  min: 1,
+                  max: 60,
+                  divisions: 59,
+                  value: tempGoal.toDouble(),
+                  onChanged: (v) => setLocal(() => tempGoal = v.round()),
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('إلغاء'),
-                  ),
-                  FilledButton(
-                    onPressed: () {
-                      setState(() {
-                        _dailyWirdGoalPages = tempGoal;
-                        if (_wirdReadToday > _dailyWirdGoalPages) {
-                          _wirdReadToday = _dailyWirdGoalPages;
-                        }
-                      });
-                      _persistPreferences();
-                      Navigator.pop(ctx);
-                    },
-                    child: const Text('حفظ'),
-                  ),
-                ],
-              );
-            },
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+              FilledButton(
+                onPressed: () {
+                  setState(() {
+                    _dailyWirdGoalPages = tempGoal;
+                    if (_wirdReadToday > _dailyWirdGoalPages) {
+                      _wirdReadToday = _dailyWirdGoalPages;
+                    }
+                  });
+                  _saveState();
+                  Navigator.pop(ctx);
+                },
+                child: const Text('حفظ'),
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
-  void _openScaleSheet() {
+  void _openScale() {
     double tempScale = _pageScale;
     showModalBottomSheet(
       context: context,
       backgroundColor:
           _nightMode ? const Color(0xFF1A1D22) : const Color(0xFFFAF5EA),
       builder: (ctx) {
-        final Color fg =
-            _nightMode ? const Color(0xFFE7DFC8) : const Color(0xFF231F1A);
+        final fg = _nightMode ? const Color(0xFFE7DFC8) : const Color(0xFF231F1A);
         return Directionality(
           textDirection: TextDirection.rtl,
           child: StatefulBuilder(
-            builder: (context, setLocalState) {
-              return Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'حجم عرض الصفحة: ${(tempScale * 100).round()}%',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: fg,
-                      ),
-                    ),
-                    Slider(
-                      min: 0.9,
-                      max: 1.25,
-                      divisions: 14,
-                      value: tempScale,
-                      onChanged: (v) {
-                        setLocalState(() => tempScale = v);
-                        setState(() => _pageScale = v);
+            builder: (context, setLocal) => Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'حجم عرض الصفحة: ${(tempScale * 100).round()}%',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: fg),
+                  ),
+                  Slider(
+                    min: 0.9,
+                    max: 1.25,
+                    divisions: 14,
+                    value: tempScale,
+                    onChanged: (v) {
+                      setLocal(() => tempScale = v);
+                      setState(() => _pageScale = v);
+                    },
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton(
+                      onPressed: () {
+                        _saveState();
+                        Navigator.pop(ctx);
                       },
+                      child: const Text('تم'),
                     ),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: FilledButton(
-                        onPressed: () {
-                          _persistPreferences();
-                          Navigator.pop(ctx);
-                        },
-                        child: const Text('تم'),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+                  ),
+                ],
+              ),
+            ),
           ),
         );
       },
@@ -1043,219 +769,333 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
 
   @override
   void dispose() {
-    _settleController.dispose();
+    _settleCtrl.dispose();
     super.dispose();
   }
 }
 
-// ============================================================================
-// هندسة العطف المائل والتقوّس (الصفحة المعطوفة فقط مع الإطار المدمج)
-// ============================================================================
+class _UnderPageLayer extends StatelessWidget {
+  final int pageNumber;
+  final bool nightMode;
+  final double scale;
+  final double progress;
 
-class _CurlGeometry {
+  const _UnderPageLayer({
+    required this.pageNumber,
+    required this.nightMode,
+    required this.scale,
+    required this.progress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final double shade = (0.18 * (1.0 - progress)).clamp(0.0, 0.22);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        MushafSingleSheet(pageNumber: pageNumber, nightMode: nightMode, scale: scale),
+        IgnorePointer(child: Container(color: Colors.black.withValues(alpha: shade))),
+      ],
+    );
+  }
+}
+
+class _ActiveCurledSheet extends StatelessWidget {
+  final int currentPage;
+  final int backPage;
+  final double width;
+  final double height;
+  final int direction;
+  final double progress;
+  final double dyRatio;
+  final bool nightMode;
+  final double scale;
+
+  const _ActiveCurledSheet({
+    required this.currentPage,
+    required this.backPage,
+    required this.width,
+    required this.height,
+    required this.direction,
+    required this.progress,
+    required this.dyRatio,
+    required this.nightMode,
+    required this.scale,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (direction == 0 || progress <= 0.0) {
+      return MushafSingleSheet(
+        pageNumber: currentPage,
+        nightMode: nightMode,
+        scale: scale,
+      );
+    }
+
+    final _SheetCurlData data = _SheetCurlData.build(
+      size: Size(width, height),
+      direction: direction,
+      progress: progress,
+      dyRatio: dyRatio,
+    );
+
+    // إزاحة واقعية واضحة تتبع حركة السحب دون إخفاء الورقة
+    final double dxShift = direction * width * 0.22 * progress;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // ظل على الصفحة الثابتة بمحاذاة خط العطف
+        IgnorePointer(
+          child: CustomPaint(
+            size: Size(width, height),
+            painter: _CreaseShadowPainter(
+              data: data,
+              progress: progress,
+              nightMode: nightMode,
+            ),
+          ),
+        ),
+
+        // الجزء غير المنعطف من الورقة الحالية مع إزاحة خفيفة متجاوبة
+        Transform.translate(
+          offset: Offset(dxShift, 0),
+          child: ClipPath(
+            clipper: _FixedSheetClipper(data: data),
+            child: MushafSingleSheet(
+              pageNumber: currentPage,
+              nightMode: nightMode,
+              scale: scale,
+            ),
+          ),
+        ),
+
+        // ظهر الجزء المنعطف: يعرض الصفحة التالية معكوسة مع ظل وحافة واضحة
+        Transform.translate(
+          offset: Offset(dxShift, 0),
+          child: ClipPath(
+            clipper: _FlapClipper(data: data),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Transform(
+                  alignment: Alignment.center,
+                  transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
+                  child: Opacity(
+                    opacity: nightMode ? 0.45 : 0.60,
+                    child: MushafSingleSheet(
+                      pageNumber: backPage,
+                      nightMode: nightMode,
+                      scale: scale,
+                    ),
+                  ),
+                ),
+                IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: (nightMode
+                              ? const Color(0xFF1A1E24)
+                              : const Color(0xFFF3EAD8))
+                          .withValues(alpha: nightMode ? 0.48 : 0.40),
+                    ),
+                  ),
+                ),
+                IgnorePointer(
+                  child: CustomPaint(
+                    size: Size(width, height),
+                    painter: _FlapCreasePainter(
+                      data: data,
+                      progress: progress,
+                      nightMode: nightMode,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SheetCurlData {
   final Size size;
-  final int dragDirection; // -1 لليسار، +1 لليمين
-  final double progress; // 0.0 .. 1.0
-  final double creaseTopX;
-  final double creaseBottomX;
-  final double bowOffsetX;
+  final int direction;
+  final double progress;
+  final double topX;
+  final double bottomX;
+  final double bowX;
   final double focusY;
   final double flapWidth;
 
-  const _CurlGeometry({
+  const _SheetCurlData({
     required this.size,
-    required this.dragDirection,
+    required this.direction,
     required this.progress,
-    required this.creaseTopX,
-    required this.creaseBottomX,
-    required this.bowOffsetX,
+    required this.topX,
+    required this.bottomX,
+    required this.bowX,
     required this.focusY,
     required this.flapWidth,
   });
 
-  factory _CurlGeometry.compute({
+  factory _SheetCurlData.build({
     required Size size,
-    required int dragDirection,
+    required int direction,
     required double progress,
-    required double pointerDyRatio,
+    required double dyRatio,
   }) {
     final double w = size.width;
     final double h = size.height;
+    final double biasY = (dyRatio - 0.5) * 2.0;
+    final double slant = biasY * w * 0.16 * progress;
+    final double bow = w * 0.09 * (progress * (1.0 - progress * 0.3));
+    final double fy = (h * dyRatio).clamp(h * 0.1, h * 0.9);
+    final double flap = (w * (0.16 + 0.24 * progress)).clamp(24.0, w * 0.45);
 
-    final double verticalBias = (pointerDyRatio - 0.5) * 2.0;
-    final double slantPx = verticalBias * w * 0.16 * progress;
-    final double bowMagnitude =
-        w * 0.085 * (progress * (1.0 - progress * 0.35));
-    final double focusY = (h * pointerDyRatio).clamp(h * 0.1, h * 0.9);
-
-    if (dragDirection < 0) {
-      final double baseCreaseX = w * (1.0 - progress);
-      final double creaseTopX = (baseCreaseX + slantPx).clamp(0.0, w);
-      final double creaseBottomX = (baseCreaseX - slantPx).clamp(0.0, w);
-      final double bowOffsetX = -bowMagnitude;
-      final double flapWidth =
-          (w * (0.14 + 0.22 * progress)).clamp(18.0, w * 0.42);
-
-      return _CurlGeometry(
+    if (direction < 0) {
+      final double base = w * (1.0 - progress * 0.85);
+      return _SheetCurlData(
         size: size,
-        dragDirection: dragDirection,
+        direction: direction,
         progress: progress,
-        creaseTopX: creaseTopX,
-        creaseBottomX: creaseBottomX,
-        bowOffsetX: bowOffsetX,
-        focusY: focusY,
-        flapWidth: flapWidth,
+        topX: (base + slant).clamp(0.0, w),
+        bottomX: (base - slant).clamp(0.0, w),
+        bowX: -bow,
+        focusY: fy,
+        flapWidth: flap,
       );
     } else {
-      final double baseCreaseX = w * progress;
-      final double creaseTopX = (baseCreaseX - slantPx).clamp(0.0, w);
-      final double creaseBottomX = (baseCreaseX + slantPx).clamp(0.0, w);
-      final double bowOffsetX = bowMagnitude;
-      final double flapWidth =
-          (w * (0.14 + 0.22 * progress)).clamp(18.0, w * 0.42);
-
-      return _CurlGeometry(
+      final double base = w * (progress * 0.85);
+      return _SheetCurlData(
         size: size,
-        dragDirection: dragDirection,
+        direction: direction,
         progress: progress,
-        creaseTopX: creaseTopX,
-        creaseBottomX: creaseBottomX,
-        bowOffsetX: bowOffsetX,
-        focusY: focusY,
-        flapWidth: flapWidth,
+        topX: (base - slant).clamp(0.0, w),
+        bottomX: (base + slant).clamp(0.0, w),
+        bowX: bow,
+        focusY: fy,
+        flapWidth: flap,
       );
     }
   }
 
-  Path buildCreaseCurvePath() {
-    final double midCreaseX = (creaseTopX + creaseBottomX) * 0.5 + bowOffsetX;
+  Path creasePath() {
+    final double midX = (topX + bottomX) * 0.5 + bowX;
     return Path()
-      ..moveTo(creaseTopX, 0)
-      ..quadraticBezierTo(midCreaseX, focusY, creaseBottomX, size.height);
+      ..moveTo(topX, 0)
+      ..quadraticBezierTo(midX, focusY, bottomX, size.height);
   }
 
-  Path buildOuterFlapCurvePath() {
-    final double topOuterX =
-        (creaseTopX - dragDirection * flapWidth).clamp(0.0, size.width);
-    final double bottomOuterX =
-        (creaseBottomX - dragDirection * flapWidth).clamp(0.0, size.width);
-    final double midOuterX =
-        ((topOuterX + bottomOuterX) * 0.5 + bowOffsetX * 1.25)
-            .clamp(0.0, size.width);
-
+  Path outerFlapPath() {
+    final double tOut = (topX - direction * flapWidth).clamp(0.0, size.width);
+    final double bOut = (bottomX - direction * flapWidth).clamp(0.0, size.width);
+    final double mOut =
+        ((tOut + bOut) * 0.5 + bowX * 1.25).clamp(0.0, size.width);
     return Path()
-      ..moveTo(topOuterX, 0)
-      ..quadraticBezierTo(midOuterX, focusY, bottomOuterX, size.height);
+      ..moveTo(tOut, 0)
+      ..quadraticBezierTo(mOut, focusY, bOut, size.height);
   }
 }
 
-class _RemainingSheetClipper extends CustomClipper<Path> {
-  final _CurlGeometry geometry;
-
-  _RemainingSheetClipper({required this.geometry});
+class _FixedSheetClipper extends CustomClipper<Path> {
+  final _SheetCurlData data;
+  _FixedSheetClipper({required this.data});
 
   @override
   Path getClip(Size size) {
-    final double midCreaseX =
-        (geometry.creaseTopX + geometry.creaseBottomX) * 0.5 + geometry.bowOffsetX;
+    final double midX = (data.topX + data.bottomX) * 0.5 + data.bowX;
     final Path path = Path();
-
-    if (geometry.dragDirection < 0) {
+    if (data.direction < 0) {
       path.moveTo(0, 0);
-      path.lineTo(geometry.creaseTopX, 0);
-      path.quadraticBezierTo(
-        midCreaseX,
-        geometry.focusY,
-        geometry.creaseBottomX,
-        size.height,
-      );
+      path.lineTo(data.topX, 0);
+      path.quadraticBezierTo(midX, data.focusY, data.bottomX, size.height);
       path.lineTo(0, size.height);
       path.close();
     } else {
-      path.moveTo(geometry.creaseTopX, 0);
+      path.moveTo(data.topX, 0);
       path.lineTo(size.width, 0);
       path.lineTo(size.width, size.height);
-      path.lineTo(geometry.creaseBottomX, size.height);
-      path.quadraticBezierTo(
-        midCreaseX,
-        geometry.focusY,
-        geometry.creaseTopX,
-        0,
-      );
+      path.lineTo(data.bottomX, size.height);
+      path.quadraticBezierTo(midX, data.focusY, data.topX, 0);
       path.close();
     }
-
     return path;
   }
 
   @override
-  bool shouldReclip(covariant _RemainingSheetClipper oldClipper) {
-    return oldClipper.geometry.creaseTopX != geometry.creaseTopX ||
-        oldClipper.geometry.creaseBottomX != geometry.creaseBottomX ||
-        oldClipper.geometry.bowOffsetX != geometry.bowOffsetX ||
-        oldClipper.geometry.focusY != geometry.focusY ||
-        oldClipper.geometry.dragDirection != geometry.dragDirection;
-  }
+  bool shouldReclip(covariant _FixedSheetClipper oldClipper) => oldClipper.data != data;
 }
 
-class _FoldedFlapClipper extends CustomClipper<Path> {
-  final _CurlGeometry geometry;
-
-  _FoldedFlapClipper({required this.geometry});
+class _FlapClipper extends CustomClipper<Path> {
+  final _SheetCurlData data;
+  _FlapClipper({required this.data});
 
   @override
   Path getClip(Size size) {
-    final double midCreaseX =
-        (geometry.creaseTopX + geometry.creaseBottomX) * 0.5 + geometry.bowOffsetX;
+    final double midX = (data.topX + data.bottomX) * 0.5 + data.bowX;
+    final double tOut =
+        (data.topX - data.direction * data.flapWidth).clamp(0.0, size.width);
+    final double bOut =
+        (data.bottomX - data.direction * data.flapWidth).clamp(0.0, size.width);
+    final double mOut =
+        ((tOut + bOut) * 0.5 + data.bowX * 1.25).clamp(0.0, size.width);
 
-    final double topOuterX = (geometry.creaseTopX -
-            geometry.dragDirection * geometry.flapWidth)
-        .clamp(0.0, size.width);
-    final double bottomOuterX = (geometry.creaseBottomX -
-            geometry.dragDirection * geometry.flapWidth)
-        .clamp(0.0, size.width);
-    final double midOuterX =
-        ((topOuterX + bottomOuterX) * 0.5 + geometry.bowOffsetX * 1.25)
-            .clamp(0.0, size.width);
-
-    final Path path = Path()
-      ..moveTo(geometry.creaseTopX, 0)
-      ..quadraticBezierTo(
-        midCreaseX,
-        geometry.focusY,
-        geometry.creaseBottomX,
-        size.height,
-      )
-      ..lineTo(bottomOuterX, size.height)
-      ..quadraticBezierTo(
-        midOuterX,
-        geometry.focusY,
-        topOuterX,
-        0,
-      )
+    return Path()
+      ..moveTo(data.topX, 0)
+      ..quadraticBezierTo(midX, data.focusY, data.bottomX, size.height)
+      ..lineTo(bOut, size.height)
+      ..quadraticBezierTo(mOut, data.focusY, tOut, 0)
       ..close();
-
-    return path;
   }
 
   @override
-  bool shouldReclip(covariant _FoldedFlapClipper oldClipper) {
-    return oldClipper.geometry.creaseTopX != geometry.creaseTopX ||
-        oldClipper.geometry.creaseBottomX != geometry.creaseBottomX ||
-        oldClipper.geometry.bowOffsetX != geometry.bowOffsetX ||
-        oldClipper.geometry.focusY != geometry.focusY ||
-        oldClipper.geometry.flapWidth != geometry.flapWidth ||
-        oldClipper.geometry.dragDirection != geometry.dragDirection;
-  }
+  bool shouldReclip(covariant _FlapClipper oldClipper) => oldClipper.data != data;
 }
 
-class _UnderCreaseShadowPainter extends CustomPainter {
-  final _CurlGeometry geometry;
+class _CreaseShadowPainter extends CustomPainter {
+  final _SheetCurlData data;
   final double progress;
   final bool nightMode;
 
-  _UnderCreaseShadowPainter({
-    required this.geometry,
+  _CreaseShadowPainter({
+    required this.data,
+    required this.progress,
+    required this.nightMode,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (progress <= 0.0) return;
+    final double sw = (26.0 * progress).clamp(5.0, 28.0);
+    final double alpha = (nightMode ? 0.36 : 0.26) * progress;
+
+    canvas.drawPath(
+      data.creasePath(),
+      Paint()
+        ..color = Colors.black.withValues(alpha: alpha)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = sw
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, sw * 0.55),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _CreaseShadowPainter oldDelegate) =>
+      oldDelegate.data != data ||
+      oldDelegate.progress != progress ||
+      oldDelegate.nightMode != nightMode;
+}
+
+class _FlapCreasePainter extends CustomPainter {
+  final _SheetCurlData data;
+  final double progress;
+  final bool nightMode;
+
+  _FlapCreasePainter({
+    required this.data,
     required this.progress,
     required this.nightMode,
   });
@@ -1264,72 +1104,31 @@ class _UnderCreaseShadowPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (progress <= 0.0) return;
 
-    final Path crease = geometry.buildCreaseCurvePath();
-    final double shadowWidth = (24.0 * progress).clamp(4.0, 26.0);
-    final double alpha = (nightMode ? 0.34 : 0.24) * progress;
+    canvas.drawPath(
+      data.outerFlapPath(),
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.22 * progress)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 10.0
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6.0),
+    );
 
-    final Paint shadowPaint = Paint()
-      ..color = Colors.black.withValues(alpha: alpha)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = shadowWidth
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, shadowWidth * 0.55);
-
-    canvas.drawPath(crease, shadowPaint);
+    canvas.drawPath(
+      data.creasePath(),
+      Paint()
+        ..color = (nightMode ? Colors.white : Colors.black)
+            .withValues(alpha: (nightMode ? 0.18 : 0.24) * progress)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _UnderCreaseShadowPainter oldDelegate) {
-    return oldDelegate.geometry != geometry ||
-        oldDelegate.progress != progress ||
-        oldDelegate.nightMode != nightMode;
-  }
+  bool shouldRepaint(covariant _FlapCreasePainter oldDelegate) =>
+      oldDelegate.data != data ||
+      oldDelegate.progress != progress ||
+      oldDelegate.nightMode != nightMode;
 }
-
-class _FlapShadingAndCreasePainter extends CustomPainter {
-  final _CurlGeometry geometry;
-  final double progress;
-  final bool nightMode;
-
-  _FlapShadingAndCreasePainter({
-    required this.geometry,
-    required this.progress,
-    required this.nightMode,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (progress <= 0.0) return;
-
-    final Path crease = geometry.buildCreaseCurvePath();
-    final Path outerEdge = geometry.buildOuterFlapCurvePath();
-
-    final Paint creaseLinePaint = Paint()
-      ..color = (nightMode ? Colors.white : Colors.black)
-          .withValues(alpha: (nightMode ? 0.16 : 0.22) * progress)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4;
-
-    final Paint outerShadowPaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.20 * progress)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 10.0
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6.0);
-
-    canvas.drawPath(outerEdge, outerShadowPaint);
-    canvas.drawPath(crease, creaseLinePaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _FlapShadingAndCreasePainter oldDelegate) {
-    return oldDelegate.geometry != geometry ||
-        oldDelegate.progress != progress ||
-        oldDelegate.nightMode != nightMode;
-  }
-}
-
-// ============================================================================
-// صفحة المصحف المفردة مع الإطار القرآني المدمج بالورقة
-// ============================================================================
 
 class MushafSingleSheet extends StatelessWidget {
   final int pageNumber;
@@ -1345,25 +1144,24 @@ class MushafSingleSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color paperColor =
+    final Color paper =
         nightMode ? const Color(0xFF15181C) : const Color(0xFFFAF4E6);
-    final Color frameOuterColor =
+    final Color outerFrame =
         nightMode ? const Color(0xFFC59B27) : const Color(0xFF8A5A1E);
-    final Color frameInnerColor =
+    final Color innerFrame =
         nightMode ? const Color(0xFF8F6E1B) : const Color(0xFFB6833A);
-
     final String assetPath = 'assets/images/quran/$pageNumber.png';
 
     return Transform.scale(
       scale: scale,
       child: Container(
-        color: paperColor,
+        color: paper,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: CustomPaint(
-          painter: _QuranicPageFramePainter(
-            outerColor: frameOuterColor,
-            innerColor: frameInnerColor,
-            paperColor: paperColor,
+          painter: _QuranFramePainter(
+            outerColor: outerFrame,
+            innerColor: innerFrame,
+            paperColor: paper,
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
@@ -1378,7 +1176,7 @@ class MushafSingleSheet extends StatelessWidget {
                       Icon(
                         Icons.auto_stories,
                         size: 44,
-                        color: frameOuterColor.withValues(alpha: 0.7),
+                        color: outerFrame.withValues(alpha: 0.7),
                       ),
                       const SizedBox(height: 10),
                       Text(
@@ -1414,12 +1212,12 @@ class MushafSingleSheet extends StatelessWidget {
   }
 }
 
-class _QuranicPageFramePainter extends CustomPainter {
+class _QuranFramePainter extends CustomPainter {
   final Color outerColor;
   final Color innerColor;
   final Color paperColor;
 
-  _QuranicPageFramePainter({
+  _QuranFramePainter({
     required this.outerColor,
     required this.innerColor,
     required this.paperColor,
@@ -1427,8 +1225,8 @@ class _QuranicPageFramePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Rect outerRect = Offset.zero & size;
-    final Rect innerRect = outerRect.deflate(7.5);
+    final Rect outer = Offset.zero & size;
+    final Rect inner = outer.deflate(7.5);
 
     final Paint outerPaint = Paint()
       ..color = outerColor
@@ -1440,8 +1238,8 @@ class _QuranicPageFramePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.1;
 
-    canvas.drawRect(outerRect, outerPaint);
-    canvas.drawRect(innerRect, innerPaint);
+    canvas.drawRect(outer, outerPaint);
+    canvas.drawRect(inner, innerPaint);
 
     const double cornerLen = 18.0;
     final Paint cornerPaint = Paint()
@@ -1450,58 +1248,124 @@ class _QuranicPageFramePainter extends CustomPainter {
       ..strokeWidth = 2.2
       ..strokeCap = StrokeCap.square;
 
-    final List<Offset> corners = [
-      outerRect.topLeft,
-      outerRect.topRight,
-      outerRect.bottomLeft,
-      outerRect.bottomRight,
-    ];
-
-    for (final c in corners) {
-      final double dx = (c.dx == outerRect.left) ? 1.0 : -1.0;
-      final double dy = (c.dy == outerRect.top) ? 1.0 : -1.0;
+    for (final c in [outer.topLeft, outer.topRight, outer.bottomLeft, outer.bottomRight]) {
+      final double dx = c.dx == outer.left ? 1.0 : -1.0;
+      final double dy = c.dy == outer.top ? 1.0 : -1.0;
       canvas.drawLine(c, Offset(c.dx + dx * cornerLen, c.dy), cornerPaint);
       canvas.drawLine(c, Offset(c.dx, c.dy + dy * cornerLen), cornerPaint);
     }
 
     final double midX = size.width / 2;
     final double midY = size.height / 2;
-    const double diamondR = 5.0;
+    const double r = 5.0;
 
-    final List<Offset> midPoints = [
-      Offset(midX, outerRect.top),
-      Offset(midX, outerRect.bottom),
-      Offset(outerRect.left, midY),
-      Offset(outerRect.right, midY),
-    ];
-
-    for (final m in midPoints) {
-      final Path diamond = Path()
-        ..moveTo(m.dx, m.dy - diamondR)
-        ..lineTo(m.dx + diamondR, m.dy)
-        ..lineTo(m.dx, m.dy + diamondR)
-        ..lineTo(m.dx - diamondR, m.dy)
+    for (final m in [
+      Offset(midX, outer.top),
+      Offset(midX, outer.bottom),
+      Offset(outer.left, midY),
+      Offset(outer.right, midY),
+    ]) {
+      final Path d = Path()
+        ..moveTo(m.dx, m.dy - r)
+        ..lineTo(m.dx + r, m.dy)
+        ..lineTo(m.dx, m.dy + r)
+        ..lineTo(m.dx - r, m.dy)
         ..close();
-      canvas.drawPath(diamond, Paint()..color = paperColor);
-      canvas.drawPath(diamond, outerPaint);
+      canvas.drawPath(d, Paint()..color = paperColor);
+      canvas.drawPath(d, outerPaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _QuranicPageFramePainter oldDelegate) {
-    return oldDelegate.outerColor != outerColor ||
-        oldDelegate.innerColor != innerColor ||
-        oldDelegate.paperColor != paperColor;
+  bool shouldRepaint(covariant _QuranFramePainter oldDelegate) =>
+      oldDelegate.outerColor != outerColor ||
+      oldDelegate.innerColor != innerColor ||
+      oldDelegate.paperColor != paperColor;
+}
+
+class _BottomBar extends StatelessWidget {
+  final Color textColor;
+  final Color accentColor;
+  final Color bgColor;
+  final int wirdRead;
+  final int wirdGoal;
+  final VoidCallback onOpenSurahs;
+  final VoidCallback onOpenJuz;
+  final VoidCallback onOpenWird;
+  final VoidCallback onOpenScale;
+
+  const _BottomBar({
+    required this.textColor,
+    required this.accentColor,
+    required this.bgColor,
+    required this.wirdRead,
+    required this.wirdGoal,
+    required this.onOpenSurahs,
+    required this.onOpenJuz,
+    required this.onOpenWird,
+    required this.onOpenScale,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final double ratio =
+        wirdGoal > 0 ? (wirdRead / wirdGoal).clamp(0.0, 1.0) : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        border: Border(top: BorderSide(color: textColor.withValues(alpha: 0.12))),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'الورد اليومي: $wirdRead / $wirdGoal صفحة',
+                  style: TextStyle(fontSize: 12, color: textColor.withValues(alpha: 0.85)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: ratio,
+                      minHeight: 6,
+                      backgroundColor: textColor.withValues(alpha: 0.12),
+                      valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _BarBtn(icon: Icons.menu_book_outlined, label: 'الفهرس', color: textColor, onTap: onOpenSurahs),
+                _BarBtn(icon: Icons.grid_view_outlined, label: 'الأجزاء', color: textColor, onTap: onOpenJuz),
+                _BarBtn(icon: Icons.track_changes_outlined, label: 'الورد', color: textColor, onTap: onOpenWird),
+                _BarBtn(icon: Icons.zoom_in_outlined, label: 'الحجم', color: textColor, onTap: onOpenScale),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
-class _NavActionButton extends StatelessWidget {
+class _BarBtn extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
   final VoidCallback onTap;
 
-  const _NavActionButton({
+  const _BarBtn({
     required this.icon,
     required this.label,
     required this.color,
@@ -1520,10 +1384,7 @@ class _NavActionButton extends StatelessWidget {
           children: [
             Icon(icon, size: 20, color: color),
             const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(fontSize: 11, color: color),
-            ),
+            Text(label, style: TextStyle(fontSize: 11, color: color)),
           ],
         ),
       ),
