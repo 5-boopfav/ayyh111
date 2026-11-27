@@ -1,10 +1,14 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import '../models/islamic_models.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class QuranScreen extends StatefulWidget {
-  const QuranScreen({super.key});
+  final int initialPage;
+
+  const QuranScreen({
+    super.key,
+    this.initialPage = 1,
+  });
 
   @override
   State<QuranScreen> createState() => _QuranScreenState();
@@ -13,166 +17,211 @@ class QuranScreen extends StatefulWidget {
 class _QuranScreenState extends State<QuranScreen>
     with SingleTickerProviderStateMixin {
   static const int _totalPages = 604;
+  static const String _prefLastPage = 'quran_last_page';
+  static const String _prefNightMode = 'quran_night_mode';
+  static const String _prefBookmarkPage = 'quran_bookmark_page';
+  static const String _prefDailyWirdPages = 'quran_daily_wird_pages';
+  static const String _prefFontScale = 'quran_font_scale';
 
-  static const List<String> _surahNames = <String>[
-    'الفاتحة', 'البقرة', 'آل عمران', 'النساء', 'المائدة', 'الأنعام',
-    'الأعراف', 'الأنفال', 'التوبة', 'يونس', 'هود', 'يوسف',
-    'الرعد', 'إبراهيم', 'الحجر', 'النحل', 'الإسراء', 'الكهف',
-    'مريم', 'طه', 'الأنبياء', 'الحج', 'المؤمنون', 'النور',
-    'الفرقان', 'الشعراء', 'النمل', 'القصص', 'العنكبوت', 'الروم',
-    'لقمان', 'السجدة', 'الأحزاب', 'سبأ', 'فاطر', 'يس',
-    'الصافات', 'ص', 'الزمر', 'غافر', 'فصلت', 'الشورى',
-    'الزخرف', 'الدخان', 'الجاثية', 'الأحقاف', 'محمد', 'الفتح',
-    'الحجرات', 'ق', 'الذاريات', 'الطور', 'النجم', 'القمر',
-    'الرحمن', 'الواقعة', 'الحديد', 'المجادلة', 'الحشر', 'الممتحنة',
-    'الصف', 'الجمعة', 'المنافقون', 'التغابن', 'الطلاق', 'التحريم',
-    'الملك', 'القلم', 'الحاقة', 'المعارج', 'نوح', 'الجن',
-    'المزمل', 'المدثر', 'القيامة', 'الإنسان', 'المرسلات', 'النبأ',
-    'النازعات', 'عبس', 'التكوير', 'الإنفطار', 'المطففين', 'الإنشقاق',
-    'البروج', 'الطارق', 'الأعلى', 'الغاشية', 'الفجر', 'البلد',
-    'الشمس', 'الليل', 'الضحى', 'الشرح', 'التين', 'العلق',
-    'القدر', 'البينة', 'الزلزلة', 'العاديات', 'القارعة', 'التكاثر',
-    'العصر', 'الهمزة', 'الفيل', 'قريش', 'الماعون', 'الكوثر',
-    'الكافرون', 'النصر', 'المسد', 'الإخلاص', 'الفلق', 'الناس',
-  ];
+  late PageController _pageController;
+  late AnimationController _curlController;
 
-  static const List<String> _juzNames = <String>[
-    'الجزء الأول', 'الجزء الثاني', 'الجزء الثالث', 'الجزء الرابع',
-    'الجزء الخامس', 'الجزء السادس', 'الجزء السابع', 'الجزء الثامن',
-    'الجزء التاسع', 'الجزء العاشر', 'الجزء الحادي عشر', 'الجزء الثاني عشر',
-    'الجزء الثالث عشر', 'الجزء الرابع عشر', 'الجزء الخامس عشر',
-    'الجزء السادس عشر', 'الجزء السابع عشر', 'الجزء الثامن عشر',
-    'الجزء التاسع عشر', 'الجزء العشرون', 'الجزء الحادي والعشرون',
-    'الجزء الثاني والعشرون', 'الجزء الثالث والعشرون', 'الجزء الرابع والعشرون',
-    'الجزء الخامس والعشرون', 'الجزء السادس والعشرون', 'الجزء السابع والعشرون',
-    'الجزء الثامن والعشرون', 'الجزء التاسع والعشرون', 'الجزء الثلاثون',
-  ];
-
-  late final AnimationController _curlController;
   int _currentPage = 1;
-  int _bookmarkedPage = 1;
-  int _dailyWird = 20;
-  bool _pageSoundEnabled = true;
   bool _nightMode = false;
-  double _fontSize = 19.0;
-  bool _turningForward = true;
-  Offset _dragStart = Offset.zero;
-  Offset _dragCurrent = Offset.zero;
-  Size _pageBoxSize = Size.zero;
+  int? _bookmarkedPage;
+  int _dailyWirdPages = 20;
+  double _fontScale = 1.0;
 
-  Map<int, QuranPageData> _pagesMap = const <int, QuranPageData>{};
-  bool _isLoadingData = true;
+  // حالة حركة انحناء الصفحة أثناء السحب
+  bool _isDragging = false;
+  bool _dragForward = true;
+  double _dragProgress = 0.0;
+  double _dragStartX = 0.0;
 
   @override
   void initState() {
     super.initState();
+    _currentPage = widget.initialPage.clamp(1, _totalPages);
+    _pageController = PageController(initialPage: _currentPage - 1);
     _curlController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 520),
-    )..addStatusListener(_onCurlStatus);
-    _loadLocalPages();
-  }
-
-  String _resolveSurahName(int surahNumber, String rawName) {
-    final trimmed = rawName.trim();
-    if (trimmed.isNotEmpty && !RegExp(r'^\d+$').hasMatch(trimmed)) {
-      return trimmed.startsWith('سورة') ? trimmed : 'سورة $trimmed';
-    }
-    if (surahNumber >= 1 && surahNumber <= _surahNames.length) {
-      return 'سورة ${_surahNames[surahNumber - 1]}';
-    }
-    return 'سورة $surahNumber';
-  }
-
-  String _juzLabel(int juzNumber) {
-    final safe = juzNumber.clamp(1, 30);
-    return _juzNames[safe - 1];
-  }
-
-  Future<void> _loadLocalPages() async {
-    final data = await LocalIslamicRepository.instance.loadQuranPages();
-    if (!mounted) return;
-
-    final Map<int, QuranPageData> loadedMap = data;
-
-    int initialPage = _currentPage;
-    if (loadedMap.isNotEmpty && !loadedMap.containsKey(initialPage)) {
-      final sortedPages = loadedMap.keys.toList()..sort();
-      initialPage = sortedPages.first;
-    }
-
-    setState(() {
-      _pagesMap = loadedMap;
-      _currentPage = initialPage;
-      _isLoadingData = false;
-    });
-  }
-
-  void _onCurlStatus(AnimationStatus status) {
-    if (status == AnimationStatus.completed) {
-      setState(() {
-        if (_turningForward && _currentPage < _totalPages) {
-          _currentPage += 1;
-        } else if (!_turningForward && _currentPage > 1) {
-          _currentPage -= 1;
+      duration: const Duration(milliseconds: 320),
+    )..addListener(() {
+        if (!_isDragging) {
+          setState(() {
+            _dragProgress = _curlController.value;
+          });
         }
       });
-      _playPageTurnSound();
-      _curlController.reset();
-    }
+
+    _loadPreferences();
   }
 
   @override
   void dispose() {
-    _curlController.removeStatusListener(_onCurlStatus);
+    _pageController.dispose();
     _curlController.dispose();
     super.dispose();
   }
 
-  int get _juz {
-    final pageData = _pagesMap[_currentPage];
-    if (pageData != null) return pageData.juz.clamp(1, 30);
-    return (((_currentPage - 1) ~/ 20) + 1).clamp(1, 30);
-  }
+  Future<void> _loadPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
 
-  void _playPageTurnSound() {
-    if (!_pageSoundEnabled) return;
-    SystemSound.play(SystemSoundType.click);
-    HapticFeedback.lightImpact();
-  }
+    final savedPage = prefs.getInt(_prefLastPage);
+    final savedNight = prefs.getBool(_prefNightMode) ?? false;
+    final savedBookmark = prefs.getInt(_prefBookmarkPage);
+    final savedWird = prefs.getInt(_prefDailyWirdPages) ?? 20;
+    final savedScale = prefs.getDouble(_prefFontScale) ?? 1.0;
 
-  void _triggerTurn({required bool forward}) {
-    if (_curlController.isAnimating) return;
-    if (forward && _currentPage >= _totalPages) return;
-    if (!forward && _currentPage <= 1) return;
+    final targetPage =
+        (widget.initialPage != 1 ? widget.initialPage : (savedPage ?? 1))
+            .clamp(1, _totalPages);
 
     setState(() {
-      _turningForward = forward;
-      if (_pageBoxSize != Size.zero) {
-        _dragStart = forward
-            ? Offset(_pageBoxSize.width, _pageBoxSize.height * 0.85)
-            : Offset(0, _pageBoxSize.height * 0.85);
-        _dragCurrent = _dragStart;
+      _nightMode = savedNight;
+      _bookmarkedPage = savedBookmark;
+      _dailyWirdPages = savedWird.clamp(1, 100);
+      _fontScale = savedScale.clamp(0.8, 1.5);
+      _currentPage = targetPage;
+    });
+
+    if (_pageController.hasClients &&
+        (_pageController.page?.round() ?? 0) != targetPage - 1) {
+      _pageController.jumpToPage(targetPage - 1);
+    }
+  }
+
+  Future<void> _saveLastPage(int page) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_prefLastPage, page);
+  }
+
+  Future<void> _toggleNightMode() async {
+    final next = !_nightMode;
+    setState(() => _nightMode = next);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefNightMode, next);
+  }
+
+  Future<void> _toggleBookmarkForCurrentPage() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      if (_bookmarkedPage == _currentPage) {
+        _bookmarkedPage = null;
+        prefs.remove(_prefBookmarkPage);
+      } else {
+        _bookmarkedPage = _currentPage;
+        prefs.setInt(_prefBookmarkPage, _currentPage);
       }
     });
-    _curlController.forward(from: 0.0);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _bookmarkedPage == _currentPage
+              ? 'تم حفظ العلامة في الصفحة $_currentPage'
+              : 'تمت إزالة العلامة',
+        ),
+        duration: const Duration(seconds: 1),
+      ),
+    );
   }
 
-  void _goToPage(int pageNumber) {
-    final target = pageNumber.clamp(1, _totalPages);
-    if (target == _currentPage) return;
+  Future<void> _saveDailyWird(int pages) async {
+    final clamped = pages.clamp(1, 100);
+    setState(() => _dailyWirdPages = clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_prefDailyWirdPages, clamped);
+  }
+
+  Future<void> _saveFontScale(double scale) async {
+    final clamped = scale.clamp(0.8, 1.5);
+    setState(() => _fontScale = clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_prefFontScale, clamped);
+  }
+
+  void _goToPage(int page) {
+    final target = page.clamp(1, _totalPages);
     setState(() {
-      _turningForward = target > _currentPage;
       _currentPage = target;
+      _isDragging = false;
+      _dragProgress = 0.0;
     });
-    _playPageTurnSound();
+    _saveLastPage(target);
+    if (_pageController.hasClients) {
+      _pageController.jumpToPage(target - 1);
+    }
   }
 
-  void _openGoToPageDialog() {
+  String _quranPageAssetPath(int pageNumber) {
+    return 'assets/images/quran/$pageNumber.png';
+  }
+
+  int _estimateJuz(int pageNumber) {
+    return (((pageNumber - 1) ~/ 20) + 1).clamp(1, 30);
+  }
+
+  void _onHorizontalDragStart(DragStartDetails details) {
+    if (_curlController.isAnimating) {
+      _curlController.stop();
+    }
+    setState(() {
+      _isDragging = true;
+      _dragStartX = details.globalPosition.dx;
+      _dragProgress = 0.0;
+    });
+  }
+
+  void _onHorizontalDragUpdate(DragUpdateDetails details, double width) {
+    if (!_isDragging || width <= 0) return;
+    final deltaX = details.globalPosition.dx - _dragStartX;
+
+    // في الاتجاه العربي RTL: السحب لليسار ينتقل للصفحة التالية، ولليمين للسابقة
+    if (deltaX < 0 && _currentPage < _totalPages) {
+      _dragForward = true;
+      _dragProgress = (-deltaX / width).clamp(0.0, 1.0);
+      setState(() {});
+    } else if (deltaX > 0 && _currentPage > 1) {
+      _dragForward = false;
+      _dragProgress = (deltaX / width).clamp(0.0, 1.0);
+      setState(() {});
+    } else {
+      setState(() => _dragProgress = 0.0);
+    }
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    if (!_isDragging) return;
+    final velocity = details.primaryVelocity ?? 0.0;
+    final shouldComplete = _dragProgress > 0.35 || velocity.abs() > 700;
+    final targetPage = _dragForward
+        ? (_currentPage + 1).clamp(1, _totalPages)
+        : (_currentPage - 1).clamp(1, _totalPages);
+
+    _isDragging = false;
+
+    if (shouldComplete && targetPage != _currentPage) {
+      _curlController.forward(from: _dragProgress).then((_) {
+        if (!mounted) return;
+        _goToPage(targetPage);
+        _curlController.reset();
+      });
+    } else {
+      _curlController.reverse(from: _dragProgress).then((_) {
+        if (!mounted) return;
+        setState(() => _dragProgress = 0.0);
+      });
+    }
+  }
+
+  Future<void> _openGoToPageDialog() async {
     final controller = TextEditingController(text: '$_currentPage');
-    showDialog<void>(
+    final result = await showDialog<int>(
       context: context,
-      builder: (ctx) {
+      builder: (context) {
         return AlertDialog(
           title: const Text('الانتقال إلى صفحة'),
           content: TextField(
@@ -184,16 +233,13 @@ class _QuranScreenState extends State<QuranScreen>
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: () => Navigator.pop(context),
               child: const Text('إلغاء'),
             ),
             ElevatedButton(
               onPressed: () {
                 final parsed = int.tryParse(controller.text.trim());
-                Navigator.pop(ctx);
-                if (parsed != null) {
-                  _goToPage(parsed);
-                }
+                Navigator.pop(context, parsed);
               },
               child: const Text('انتقال'),
             ),
@@ -201,213 +247,126 @@ class _QuranScreenState extends State<QuranScreen>
         );
       },
     );
-  }
 
-  void _saveBookmark() {
-    setState(() {
-      _bookmarkedPage = _currentPage;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('تم حفظ العلامة عند الصفحة $_bookmarkedPage.'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  void _goToBookmark() {
-    _goToPage(_bookmarkedPage);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('الانتقال إلى العلامة المحفوظة: الصفحة $_bookmarkedPage.'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  void _handlePanStart(DragStartDetails details) {
-    if (_curlController.isAnimating) return;
-    _dragStart = details.localPosition;
-    _dragCurrent = details.localPosition;
-  }
-
-  void _handlePanUpdate(DragUpdateDetails details, Size size) {
-    if (_curlController.isAnimating || size.width <= 0) return;
-    _dragCurrent = details.localPosition;
-    final dx = _dragCurrent.dx - _dragStart.dx;
-
-    if (dx < 0 && _currentPage < _totalPages) {
-      if (!_turningForward && _curlController.value == 0) {
-        setState(() => _turningForward = true);
-      }
-      if (_turningForward) {
-        _curlController.value = (-dx / (size.width * 0.72)).clamp(0.0, 1.0);
-      }
-    } else if (dx > 0 && _currentPage > 1) {
-      if (_turningForward && _curlController.value == 0) {
-        setState(() => _turningForward = false);
-      }
-      if (!_turningForward) {
-        _curlController.value = (dx / (size.width * 0.72)).clamp(0.0, 1.0);
-      }
-    }
-  }
-
-  void _handlePanEnd(DragEndDetails details) {
-    if (_curlController.isAnimating) return;
-    final vx = details.velocity.pixelsPerSecond.dx;
-    if (_curlController.value >= 0.35 || vx.abs() > 650) {
-      _curlController.forward();
-    } else {
-      _curlController.reverse();
+    if (result != null && mounted) {
+      _goToPage(result);
     }
   }
 
   void _openQuickMenuSheet() {
+    final wirdEndPage = (_currentPage + _dailyWirdPages - 1).clamp(1, _totalPages);
+
     showModalBottomSheet<void>(
       context: context,
+      backgroundColor:
+          _nightMode ? const Color(0xFF1B1F24) : const Color(0xFFFFFDF8),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) {
+      builder: (context) {
         return StatefulBuilder(
-          builder: (ctx, setSheetState) {
+          builder: (context, setModalState) {
+            final textColor =
+                _nightMode ? const Color(0xFFEAE5DC) : const Color(0xFF23292E);
+
             return Padding(
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 22),
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '${_juzLabel(_juz)} • ص $_currentPage/$_totalPages',
-                        style: const TextStyle(
+                        'صفحة $_currentPage • الجزء ${_estimateJuz(_currentPage)}',
+                        style: TextStyle(
+                          fontSize: 16 * _fontScale,
                           fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                          color: textColor,
                         ),
                       ),
-                      Row(
-                        children: [
-                          TextButton.icon(
-                            onPressed: () {
-                              Navigator.pop(ctx);
-                              _saveBookmark();
-                            },
-                            icon: const Icon(Icons.bookmark_add_outlined,
-                                size: 18),
-                            label: const Text('حفظ علامة'),
-                          ),
-                          TextButton.icon(
-                            onPressed: () {
-                              Navigator.pop(ctx);
-                              _goToBookmark();
-                            },
-                            icon: const Icon(Icons.bookmark, size: 18),
-                            label: Text('ص $_bookmarkedPage'),
-                          ),
-                        ],
+                      IconButton(
+                        onPressed: _toggleBookmarkForCurrentPage,
+                        icon: Icon(
+                          _bookmarkedPage == _currentPage
+                              ? Icons.bookmark
+                              : Icons.bookmark_border,
+                          color: _bookmarkedPage == _currentPage
+                              ? const Color(0xFFC39E58)
+                              : textColor,
+                        ),
                       ),
                     ],
-                  ),
-                  const Divider(height: 16),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('الوضع الليلي للمصحف'),
-                    value: _nightMode,
-                    onChanged: (val) {
-                      setState(() => _nightMode = val);
-                      setSheetState(() {});
-                    },
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('صوت وتنبيه قلب الصفحة'),
-                    value: _pageSoundEnabled,
-                    onChanged: (val) {
-                      setState(() => _pageSoundEnabled = val);
-                      setSheetState(() {});
-                    },
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('حجم الخط: ${_fontSize.toInt()}'),
-                      Row(
-                        children: [
-                          IconButton(
-                            onPressed: () {
-                              setState(() {
-                                _fontSize = (_fontSize - 2).clamp(15.0, 30.0);
-                              });
-                              setSheetState(() {});
-                            },
-                            icon: const Icon(Icons.text_decrease),
-                          ),
-                          IconButton(
-                            onPressed: () {
-                              setState(() {
-                                _fontSize = (_fontSize + 2).clamp(15.0, 30.0);
-                              });
-                              setSheetState(() {});
-                            },
-                            icon: const Icon(Icons.text_increase),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'الورد اليومي: $_dailyWird صفحات',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: [10, 20, 30, 60].map((pages) {
-                      final selected = _dailyWird == pages;
-                      return ChoiceChip(
-                        label: Text('$pages صفحات'),
-                        selected: selected,
-                        onSelected: (_) {
-                          setState(() => _dailyWird = pages);
-                          setSheetState(() {});
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
                     children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _currentPage > 1
-                              ? () {
-                                  Navigator.pop(ctx);
-                                  _triggerTurn(forward: false);
-                                }
-                              : null,
-                          icon: const Icon(Icons.chevron_right),
-                          label: const Text('السابقة'),
-                        ),
+                      ActionChip(
+                        label: const Text('الانتقال لصفحة'),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _openGoToPageDialog();
+                        },
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _currentPage < _totalPages
-                              ? () {
-                                  Navigator.pop(ctx);
-                                  _triggerTurn(forward: true);
-                                }
-                              : null,
-                          icon: const Icon(Icons.chevron_left),
-                          label: const Text('التالية'),
+                      if (_bookmarkedPage != null)
+                        ActionChip(
+                          label: Text('العلامة (صـ $_bookmarkedPage)'),
+                          onPressed: () {
+                            final p = _bookmarkedPage!;
+                            Navigator.pop(context);
+                            _goToPage(p);
+                          },
                         ),
+                      ActionChip(
+                        label: Text(
+                          _nightMode ? 'الوضع النهاري' : 'الوضع الليلي',
+                        ),
+                        onPressed: () async {
+                          await _toggleNightMode();
+                          setModalState(() {});
+                        },
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'الورد اليومي: $_dailyWirdPages صفحات (إلى صـ $wirdEndPage)',
+                    style: TextStyle(
+                      fontSize: 13 * _fontScale,
+                      color: textColor,
+                    ),
+                  ),
+                  Slider(
+                    value: _dailyWirdPages.toDouble(),
+                    min: 1,
+                    max: 60,
+                    divisions: 59,
+                    label: '$_dailyWirdPages',
+                    onChanged: (value) async {
+                      await _saveDailyWird(value.round());
+                      setModalState(() {});
+                    },
+                  ),
+                  Text(
+                    'حجم نصوص القوائم: ${(_fontScale * 100).round()}%',
+                    style: TextStyle(
+                      fontSize: 13 * _fontScale,
+                      color: textColor,
+                    ),
+                  ),
+                  Slider(
+                    value: _fontScale,
+                    min: 0.8,
+                    max: 1.5,
+                    divisions: 14,
+                    label: '${(_fontScale * 100).round()}%',
+                    onChanged: (value) async {
+                      await _saveFontScale(value);
+                      setModalState(() {});
+                    },
                   ),
                 ],
               ),
@@ -419,244 +378,126 @@ class _QuranScreenState extends State<QuranScreen>
   }
 
   Widget _buildFullMushafPage(int pageNumber, Color primaryColor) {
-    final pageData = _pagesMap[pageNumber];
-    final juzNum =
-        pageData?.juz ?? (((pageNumber - 1) ~/ 20) + 1).clamp(1, 30);
-
-    String headerSurah = 'سُورَةُ البَقَرَة';
-    if (pageData != null && pageData.verses.isNotEmpty) {
-      final firstVerse = pageData.verses.first;
-      headerSurah =
-          _resolveSurahName(firstVerse.surahNumber, firstVerse.surahName);
-    }
-
     final paperColor =
-        _nightMode ? const Color(0xFF1A1D21) : const Color(0xFFFFFDF8);
-    final frameOuterColor =
-        _nightMode ? const Color(0xFF4F6B66) : const Color(0xFF488A85);
-    final frameInnerColor =
-        _nightMode ? const Color(0xFF8C7346) : const Color(0xFFC7A563);
+        _nightMode ? const Color(0xFF14171A) : const Color(0xFFFFFDF8);
     final headerTextColor =
         _nightMode ? const Color(0xFFE5DFD3) : const Color(0xFF2B3338);
+
+    Widget imageWidget = Image.asset(
+      _quranPageAssetPath(pageNumber),
+      fit: BoxFit.contain,
+      width: double.infinity,
+      height: double.infinity,
+      errorBuilder: (context, error, stackTrace) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Text(
+              'تعذّر العثور على صورة الصفحة $pageNumber في assets/images/quran/$pageNumber.png',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: _nightMode ? Colors.grey.shade400 : Colors.grey.shade700,
+                height: 1.6,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (_nightMode) {
+      imageWidget = ColorFiltered(
+        colorFilter: const ColorFilter.mode(
+          Color(0x88121518),
+          BlendMode.darken,
+        ),
+        child: imageWidget,
+      );
+    }
 
     return Container(
       width: double.infinity,
       height: double.infinity,
       color: paperColor,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        decoration: BoxDecoration(
-          border: Border.all(color: frameOuterColor, width: 2.0),
-        ),
-        child: Container(
-          margin: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            border: Border.all(color: frameInnerColor, width: 1.0),
-          ),
-          child: Column(
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                decoration: BoxDecoration(
-                  color: _nightMode
-                      ? const Color(0xFF22272C)
-                      : const Color(0xFFF6F5F0),
-                  border: Border(
-                    bottom: BorderSide(
-                      color: frameInnerColor.withValues(alpha: 0.65),
-                    ),
-                  ),
+      child: Stack(
+        children: [
+          Positioned.fill(child: imageWidget),
+          Positioned(
+            top: 8,
+            left: 10,
+            right: 10,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _FloatingCircleIcon(
+                  icon: Icons.search,
+                  color: headerTextColor,
+                  nightMode: _nightMode,
+                  onTap: _openGoToPageDialog,
                 ),
-                child: Row(
-                  children: [
-                    InkWell(
-                      onTap: _openGoToPageDialog,
-                      borderRadius: BorderRadius.circular(18),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          Icons.search,
-                          size: 20,
-                          color: headerTextColor,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Text(
-                        _juzLabel(juzNum),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: headerTextColor,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Text(
-                        headerSurah,
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: headerTextColor,
-                        ),
-                      ),
-                    ),
-                    InkWell(
-                      onTap: _openQuickMenuSheet,
-                      borderRadius: BorderRadius.circular(18),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          Icons.menu,
-                          size: 20,
-                          color: headerTextColor,
-                        ),
-                      ),
-                    ),
-                  ],
+                _FloatingCircleIcon(
+                  icon: Icons.menu,
+                  color: headerTextColor,
+                  nightMode: _nightMode,
+                  onTap: _openQuickMenuSheet,
                 ),
-              ),
-              Expanded(
-                child: _isLoadingData
-                    ? const Center(child: CircularProgressIndicator())
-                    : (pageData == null || pageData.verses.isEmpty)
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(20),
-                              child: Text(
-                                'بانتظار إضافة ملف البيانات المحلي الموثوق (assets/data/quran_pages.json) لعرض الصفحة $pageNumber كاملة بدون إنترنت.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: _nightMode
-                                      ? Colors.grey.shade400
-                                      : Colors.grey.shade700,
-                                  height: 1.6,
-                                ),
-                              ),
-                            ),
-                          )
-                        : SingleChildScrollView(
-                            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                            child: _buildVersesRichText(
-                              pageData.verses,
-                              primaryColor,
-                            ),
-                          ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  '$pageNumber',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: headerTextColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVersesRichText(List<QuranVerseItem> verses, Color primaryColor) {
-    final List<InlineSpan> spans = <InlineSpan>[];
-    int? currentSurahNumber;
-    final verseColor =
-        _nightMode ? const Color(0xFFF3EFE6) : const Color(0xFF181818);
-    final surahBannerColor =
-        _nightMode ? const Color(0xFFE7C77C) : primaryColor;
-    final ayahNumColor =
-        _nightMode ? const Color(0xFF88C0B8) : const Color(0xFF2B6CB0);
-
-    for (final verse in verses) {
-      if (verse.surahNumber != currentSurahNumber) {
-        currentSurahNumber = verse.surahNumber;
-        final surahLabel =
-            _resolveSurahName(verse.surahNumber, verse.surahName);
-        spans.add(
-          TextSpan(
-            text: '\n$surahLabel\n',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: _fontSize - 2,
-              color: surahBannerColor,
-              height: 1.75,
+              ],
             ),
           ),
-        );
-      }
-
-      spans.add(
-        TextSpan(
-          text: '${verse.text} ',
-          style: TextStyle(
-            fontSize: _fontSize,
-            color: verseColor,
-            height: 2.0,
-          ),
-        ),
-      );
-      spans.add(
-        TextSpan(
-          text: '(${verse.ayahNumber}) ',
-          style: TextStyle(
-            fontSize: (_fontSize - 4).clamp(11.0, 24.0),
-            fontWeight: FontWeight.bold,
-            color: ayahNumColor,
-          ),
-        ),
-      );
-    }
-
-    return RichText(
-      textAlign: TextAlign.justify,
-      textDirection: TextDirection.rtl,
-      text: TextSpan(children: spans),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final targetPageNumber = _turningForward
-        ? (_currentPage < _totalPages ? _currentPage + 1 : _currentPage)
-        : (_currentPage > 1 ? _currentPage - 1 : _currentPage);
+    final backgroundColor =
+        _nightMode ? const Color(0xFF14171A) : const Color(0xFFFFFDF8);
 
-    return Scaffold(
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            _pageBoxSize = Size(constraints.maxWidth, constraints.maxHeight);
-            return GestureDetector(
-              onPanStart: _handlePanStart,
-              onPanUpdate: (details) => _handlePanUpdate(details, _pageBoxSize),
-              onPanEnd: _handlePanEnd,
-              child: AnimatedBuilder(
-                animation: _curlController,
-                builder: (context, _) {
-                  final progress = _curlController.value;
-                  return Stack(
-                    children: [
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: backgroundColor,
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              final height = constraints.maxHeight;
+              final nextPage = _dragForward
+                  ? (_currentPage + 1).clamp(1, _totalPages)
+                  : (_currentPage - 1).clamp(1, _totalPages);
+
+              return GestureDetector(
+                onHorizontalDragStart: _onHorizontalDragStart,
+                onHorizontalDragUpdate: (d) =>
+                    _onHorizontalDragUpdate(d, width),
+                onHorizontalDragEnd: _onHorizontalDragEnd,
+                child: Stack(
+                  children: [
+                    PageView.builder(
+                      controller: _pageController,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _totalPages,
+                      onPageChanged: (index) {
+                        final page = index + 1;
+                        setState(() => _currentPage = page);
+                        _saveLastPage(page);
+                      },
+                      itemBuilder: (context, index) {
+                        return _buildFullMushafPage(index + 1, primaryColor);
+                      },
+                    ),
+                    if (_dragProgress > 0.0 && nextPage != _currentPage) ...[
                       Positioned.fill(
-                        child: _buildFullMushafPage(
-                          targetPageNumber,
-                          primaryColor,
-                        ),
+                        child: _buildFullMushafPage(nextPage, primaryColor),
                       ),
                       Positioned.fill(
                         child: ClipPath(
                           clipper: _PageCurlClipper(
-                            progress: progress,
-                            forward: _turningForward,
-                            dragY: _dragCurrent.dy,
+                            progress: _dragProgress,
+                            forward: _dragForward,
                           ),
                           child: _buildFullMushafPage(
                             _currentPage,
@@ -664,25 +505,56 @@ class _QuranScreenState extends State<QuranScreen>
                           ),
                         ),
                       ),
-                      if (progress > 0.005 && progress < 0.995)
-                        Positioned.fill(
-                          child: IgnorePointer(
-                            child: CustomPaint(
-                              painter: _PageCurlFoldPainter(
-                                progress: progress,
-                                forward: _turningForward,
-                                dragY: _dragCurrent.dy,
-                                nightMode: _nightMode,
-                              ),
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            size: Size(width, height),
+                            painter: _PageCurlFoldPainter(
+                              progress: _dragProgress,
+                              forward: _dragForward,
+                              nightMode: _nightMode,
                             ),
                           ),
                         ),
+                      ),
                     ],
-                  );
-                },
-              ),
-            );
-          },
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FloatingCircleIcon extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final bool nightMode;
+  final VoidCallback onTap;
+
+  const _FloatingCircleIcon({
+    required this.icon,
+    required this.color,
+    required this.nightMode,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: nightMode
+          ? const Color(0xCC22272C)
+          : const Color(0xCCF6F5F0),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 20, color: color),
         ),
       ),
     );
@@ -692,53 +564,39 @@ class _QuranScreenState extends State<QuranScreen>
 class _PageCurlClipper extends CustomClipper<Path> {
   final double progress;
   final bool forward;
-  final double dragY;
 
   const _PageCurlClipper({
     required this.progress,
     required this.forward,
-    required this.dragY,
   });
 
   @override
   Path getClip(Size size) {
+    final p = progress.clamp(0.0, 1.0);
     final path = Path();
-    if (progress <= 0.0) {
-      path.addRect(Rect.fromLTWH(0, 0, size.width, size.height));
-      return path;
-    }
-    if (progress >= 1.0) {
-      return path;
-    }
-
-    final remaining = (1.0 - progress).clamp(0.0, 1.0);
-    final curveBulge = math.sin(progress * math.pi) * 38.0;
-    final safeY =
-        dragY <= 0 ? size.height * 0.85 : dragY.clamp(40.0, size.height - 40.0);
-    final bendOffset = (safeY / size.height - 0.5) * curveBulge;
 
     if (forward) {
-      final edgeX = size.width * remaining;
+      final foldX = size.width * (1.0 - p);
       path.moveTo(0, 0);
-      path.lineTo((edgeX + bendOffset).clamp(0.0, size.width), 0);
+      path.lineTo(foldX, 0);
       path.quadraticBezierTo(
-        (edgeX - curveBulge * 0.65).clamp(0.0, size.width),
-        safeY,
-        (edgeX - bendOffset).clamp(0.0, size.width),
+        foldX - 24 * math.sin(p * math.pi),
+        size.height * 0.5,
+        foldX,
         size.height,
       );
       path.lineTo(0, size.height);
       path.close();
     } else {
-      final edgeX = size.width * progress;
-      path.moveTo((edgeX + bendOffset).clamp(0.0, size.width), 0);
+      final foldX = size.width * p;
+      path.moveTo(foldX, 0);
       path.lineTo(size.width, 0);
       path.lineTo(size.width, size.height);
-      path.lineTo((edgeX - bendOffset).clamp(0.0, size.width), size.height);
+      path.lineTo(foldX, size.height);
       path.quadraticBezierTo(
-        (edgeX + curveBulge * 0.65).clamp(0.0, size.width),
-        safeY,
-        (edgeX + bendOffset).clamp(0.0, size.width),
+        foldX + 24 * math.sin(p * math.pi),
+        size.height * 0.5,
+        foldX,
         0,
       );
       path.close();
@@ -749,93 +607,52 @@ class _PageCurlClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(covariant _PageCurlClipper oldClipper) {
-    return oldClipper.progress != progress ||
-        oldClipper.forward != forward ||
-        oldClipper.dragY != dragY;
+    return oldClipper.progress != progress || oldClipper.forward != forward;
   }
 }
 
 class _PageCurlFoldPainter extends CustomPainter {
   final double progress;
   final bool forward;
-  final double dragY;
   final bool nightMode;
 
   const _PageCurlFoldPainter({
     required this.progress,
     required this.forward,
-    required this.dragY,
     required this.nightMode,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final remaining = (1.0 - progress).clamp(0.0, 1.0);
-    final curveBulge = math.sin(progress * math.pi) * 38.0;
-    final safeY =
-        dragY <= 0 ? size.height * 0.85 : dragY.clamp(40.0, size.height - 40.0);
-    final bendOffset = (safeY / size.height - 0.5) * curveBulge;
-    final flapWidth =
-        (size.width * 0.16 * math.sin(progress * math.pi)).clamp(14.0, 75.0);
+    final p = progress.clamp(0.0, 1.0);
+    if (p <= 0.0) return;
 
-    final edgeX = forward ? size.width * remaining : size.width * progress;
-    final topX = (edgeX + bendOffset).clamp(0.0, size.width);
-    final midX = forward
-        ? (edgeX - curveBulge * 0.65).clamp(0.0, size.width)
-        : (edgeX + curveBulge * 0.65).clamp(0.0, size.width);
-    final botX = (edgeX - bendOffset).clamp(0.0, size.width);
+    final foldX = forward ? size.width * (1.0 - p) : size.width * p;
+    final curveOffset = forward
+        ? -24 * math.sin(p * math.pi)
+        : 24 * math.sin(p * math.pi);
 
-    final flapPath = Path()
-      ..moveTo(topX, 0)
-      ..quadraticBezierTo(midX, safeY, botX, size.height);
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: nightMode ? 0.45 : 0.22)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 8;
 
-    if (forward) {
-      flapPath
-        ..lineTo((botX + flapWidth).clamp(0.0, size.width), size.height)
-        ..quadraticBezierTo(
-          (midX + flapWidth * 0.8).clamp(0.0, size.width),
-          safeY,
-          (topX + flapWidth).clamp(0.0, size.width),
-          0,
-        );
-    } else {
-      flapPath
-        ..lineTo((botX - flapWidth).clamp(0.0, size.width), size.height)
-        ..quadraticBezierTo(
-          (midX - flapWidth * 0.8).clamp(0.0, size.width),
-          safeY,
-          (topX - flapWidth).clamp(0.0, size.width),
-          0,
-        );
-    }
-    flapPath.close();
+    final path = Path()
+      ..moveTo(foldX, 0)
+      ..quadraticBezierTo(
+        foldX + curveOffset,
+        size.height * 0.5,
+        foldX,
+        size.height,
+      );
 
-    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
-    final paint = Paint()
-      ..shader = LinearGradient(
-        begin: forward ? Alignment.centerLeft : Alignment.centerRight,
-        end: forward ? Alignment.centerRight : Alignment.centerLeft,
-        colors: nightMode
-            ? const [
-                Color(0x66000000),
-                Color(0xB33B3426),
-                Color(0x441B1914),
-              ]
-            : const [
-                Color(0x55000000),
-                Color(0xE6F6ECD4),
-                Color(0x33D8C69E),
-              ],
-      ).createShader(rect);
-
-    canvas.drawPath(flapPath, paint);
+    canvas.drawPath(path, shadowPaint);
   }
 
   @override
-  bool shouldRepaint(covariant _PageCurlFoldPainter oldClipper) {
-    return oldClipper.progress != progress ||
-        oldClipper.forward != forward ||
-        oldClipper.dragY != dragY ||
-        oldClipper.nightMode != nightMode;
+  bool shouldRepaint(covariant _PageCurlFoldPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.forward != forward ||
+        oldDelegate.nightMode != nightMode;
   }
 }
