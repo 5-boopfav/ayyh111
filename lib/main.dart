@@ -17,7 +17,6 @@ class BahmadMushafApp extends StatelessWidget {
     return const MaterialApp(
       title: 'مصحف بحمد',
       debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.system,
       home: Directionality(
         textDirection: TextDirection.rtl,
         child: MushafReaderScreen(),
@@ -51,6 +50,28 @@ class JuzInfo {
     required this.startPage,
   });
 }
+
+class PageThemePreset {
+  final String id;
+  final String name;
+  final double hue;
+  final double shade; // 0.0 فاتح ناعم .. 1.0 أغمق وأقوى
+
+  const PageThemePreset({
+    required this.id,
+    required this.name,
+    required this.hue,
+    required this.shade,
+  });
+}
+
+const List<PageThemePreset> kPageThemePresets = [
+  PageThemePreset(id: 'classic_cream', name: 'ورقي كلاسيكي', hue: 38.0, shade: 0.14),
+  PageThemePreset(id: 'warm_ivory', name: 'عاجي دافئ', hue: 30.0, shade: 0.24),
+  PageThemePreset(id: 'sage_calm', name: 'زيتوني هادئ', hue: 92.0, shade: 0.22),
+  PageThemePreset(id: 'sky_mist', name: 'سماوي لطيف', hue: 202.0, shade: 0.20),
+  PageThemePreset(id: 'sand_stone', name: 'رملي مريح', hue: 46.0, shade: 0.36),
+];
 
 const List<SurahInfo> kSurahs = [
   SurahInfo(number: 1, name: 'الفاتحة', startPage: 1, revelationType: 'مكية'),
@@ -202,6 +223,64 @@ const List<JuzInfo> kJuzList = [
   JuzInfo(number: 30, title: 'الجزء الثلاثون', startPage: 582),
 ];
 
+class PageThemePalette {
+  final Color background;
+  final Color paper;
+  final Color ink;
+  final Color accent;
+  final Color outerFrame;
+  final Color innerFrame;
+  final Color backFaceTint;
+
+  const PageThemePalette({
+    required this.background,
+    required this.paper,
+    required this.ink,
+    required this.accent,
+    required this.outerFrame,
+    required this.innerFrame,
+    required this.backFaceTint,
+  });
+
+  factory PageThemePalette.fromHueAndShade({
+    required double hue,
+    required double shade,
+  }) {
+    final double h = hue % 360.0;
+    final double s = shade.clamp(0.0, 1.0);
+
+    // تدريجة من ورق فاتح ناعم (s = 0) إلى تدريجة أغمق وأعمق (s = 1)
+    final double paperLightness = ui.lerpDouble(0.975, 0.80, s)!;
+    final double paperSat = ui.lerpDouble(0.28, 0.48, s)!;
+
+    final double bgLightness = ui.lerpDouble(0.945, 0.74, s)!;
+    final double bgSat = ui.lerpDouble(0.24, 0.42, s)!;
+
+    final Color paper = HSLColor.fromAHSL(1.0, h, paperSat, paperLightness).toColor();
+    final Color background = HSLColor.fromAHSL(1.0, h, bgSat, bgLightness).toColor();
+
+    final double inkLightness = ui.lerpDouble(0.16, 0.11, s)!;
+    final Color ink = HSLColor.fromAHSL(1.0, h, 0.22, inkLightness).toColor();
+
+    final Color accent = HSLColor.fromAHSL(1.0, h, 0.52, 0.34).toColor();
+    final Color outerFrame = HSLColor.fromAHSL(1.0, h, 0.46, 0.36).toColor();
+    final Color innerFrame = HSLColor.fromAHSL(1.0, h, 0.38, 0.52).toColor();
+    final Color backFaceTint =
+        HSLColor.fromAHSL(1.0, h, 0.35, (paperLightness - 0.06).clamp(0.55, 0.92))
+            .toColor();
+
+    return PageThemePalette(
+      background: background,
+      paper: paper,
+      ink: ink,
+      accent: accent,
+      outerFrame: outerFrame,
+      innerFrame: innerFrame,
+      backFaceTint: backFaceTint,
+    );
+  }
+}
+
 class MushafReaderScreen extends StatefulWidget {
   const MushafReaderScreen({super.key});
 
@@ -215,11 +294,17 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
 
   int _currentPage = 1;
   int? _bookmarkedPage;
+  double _ribbonDropRatio = 0.34; // طول نزول الحبل الأحمر على الصفحة
   int _dailyWirdGoalPages = 20;
   int _wirdReadToday = 0;
   String _lastWirdDate = '';
-  bool _nightMode = false;
   double _pageScale = 1.0;
+
+  // إعدادات الثيم (اللون والتدريجة) والشريط السفلي المخفي افتراضياً
+  String _selectedThemeId = 'classic_cream';
+  double _themeHue = 38.0;
+  double _themeShade = 0.14;
+  bool _showBottomBar = false;
 
   // تتبع اللمس المباشر من الحافتين ومنع تعدد عمليات التقليب في وقت واحد
   int? _activePointerId;
@@ -327,9 +412,14 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     setState(() {
       _currentPage = (prefs.getInt('current_page') ?? 1).clamp(1, totalPages);
       _bookmarkedPage = prefs.getInt('bookmarked_page');
-      _nightMode = prefs.getBool('night_mode') ?? false;
+      _ribbonDropRatio =
+          (prefs.getDouble('ribbon_drop_ratio') ?? 0.34).clamp(0.14, 0.78);
       _pageScale = (prefs.getDouble('page_scale') ?? 1.0).clamp(0.9, 1.25);
       _dailyWirdGoalPages = prefs.getInt('daily_wird_goal') ?? 20;
+      _selectedThemeId = prefs.getString('theme_preset_id') ?? 'classic_cream';
+      _themeHue = (prefs.getDouble('theme_hue') ?? 38.0).clamp(0.0, 360.0);
+      _themeShade = (prefs.getDouble('theme_shade') ?? 0.14).clamp(0.0, 1.0);
+      _showBottomBar = prefs.getBool('show_bottom_bar') ?? false;
       _lastWirdDate = today;
       _wirdReadToday = savedWird;
     });
@@ -349,9 +439,13 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     } else {
       await prefs.remove('bookmarked_page');
     }
-    await prefs.setBool('night_mode', _nightMode);
+    await prefs.setDouble('ribbon_drop_ratio', _ribbonDropRatio);
     await prefs.setDouble('page_scale', _pageScale);
     await prefs.setInt('daily_wird_goal', _dailyWirdGoalPages);
+    await prefs.setString('theme_preset_id', _selectedThemeId);
+    await prefs.setDouble('theme_hue', _themeHue);
+    await prefs.setDouble('theme_shade', _themeShade);
+    await prefs.setBool('show_bottom_bar', _showBottomBar);
     await prefs.setString('last_wird_date', _lastWirdDate);
     await prefs.setInt('wird_read_today', _wirdReadToday);
   }
@@ -517,70 +611,85 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
 
   @override
   Widget build(BuildContext context) {
-    final Color bgColor =
-        _nightMode ? const Color(0xFF121417) : const Color(0xFFF6EFE2);
-    final Color textColor =
-        _nightMode ? const Color(0xFFE7DFC8) : const Color(0xFF231F1A);
-    final Color accentColor =
-        _nightMode ? const Color(0xFFD4AF37) : const Color(0xFF8C6223);
+    final PageThemePalette palette = PageThemePalette.fromHueAndShade(
+      hue: _themeHue,
+      shade: _themeShade,
+    );
 
     final bool isTurning = _dragDir != 0 && _progress > 0.001;
     final int underPage =
         isTurning ? (_currentPage - _dragDir).clamp(1, totalPages) : _currentPage;
+    final bool hasBookmarkOnCurrent = _bookmarkedPage == _currentPage;
 
     return Scaffold(
-      backgroundColor: bgColor,
+      backgroundColor: palette.background,
       appBar: AppBar(
-        backgroundColor: bgColor,
+        backgroundColor: palette.background,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         title: Row(
           children: [
-            Text(
-              'سورة ${_currentSurah.name}',
-              style: TextStyle(
-                color: textColor,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+            Flexible(
+              child: Text(
+                'سورة ${_currentSurah.name}',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: palette.ink,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Text(
               '${_currentJuz.title} • ص $_currentPage',
               style: TextStyle(
-                color: textColor.withValues(alpha: 0.72),
-                fontSize: 13,
+                color: palette.ink.withValues(alpha: 0.72),
+                fontSize: 12,
               ),
             ),
           ],
         ),
         actions: [
+          // زر الحبل الأحمر (علامة الحفظ)
           IconButton(
-            tooltip: _bookmarkedPage == _currentPage
-                ? 'إزالة علامة الحفظ'
-                : 'حفظ العلامة هنا',
+            tooltip: hasBookmarkOnCurrent
+                ? 'إزالة الحبل الأحمر من هذه الصفحة'
+                : 'إنزال الحبل الأحمر على هذه الصفحة',
             icon: Icon(
-              _bookmarkedPage == _currentPage
-                  ? Icons.bookmark
-                  : Icons.bookmark_border,
-              color: _bookmarkedPage == _currentPage ? accentColor : textColor,
+              Icons.bookmark,
+              color: hasBookmarkOnCurrent
+                  ? const Color(0xFFD62828)
+                  : palette.ink.withValues(alpha: 0.75),
             ),
             onPressed: _toggleBookmark,
           ),
-          if (_bookmarkedPage != null)
+          if (_bookmarkedPage != null && !hasBookmarkOnCurrent)
             IconButton(
               tooltip: 'الذهاب إلى علامة الحفظ (ص $_bookmarkedPage)',
-              icon: Icon(Icons.turned_in_not, color: accentColor),
+              icon: const Icon(
+                Icons.turned_in,
+                color: Color(0xFFD62828),
+              ),
               onPressed: () => _jumpToPage(_bookmarkedPage!),
             ),
+          // زر الثيمات (اللون والتدريجة)
           IconButton(
-            tooltip: _nightMode ? 'الوضع النهاري' : 'الوضع الليلي',
+            tooltip: 'ثيم الصفحة (اللون والتدريجة)',
+            icon: Icon(Icons.palette_outlined, color: palette.ink),
+            onPressed: () => _openThemeCustomizer(palette),
+          ),
+          // زر إظهار/إخفاء الشريط السفلي المخفي افتراضياً
+          IconButton(
+            tooltip: _showBottomBar
+                ? 'إخفاء شريط الأدوات'
+                : 'إظهار شريط الأدوات (الفهرس، الأجزاء، الورد، الحجم)',
             icon: Icon(
-              _nightMode ? Icons.wb_sunny_outlined : Icons.nightlight_round,
-              color: textColor,
+              _showBottomBar ? Icons.keyboard_arrow_down : Icons.tune,
+              color: palette.ink,
             ),
             onPressed: () {
-              setState(() => _nightMode = !_nightMode);
+              setState(() => _showBottomBar = !_showBottomBar);
               _saveState();
             },
           ),
@@ -608,7 +717,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                         _NextPageUnderlay(
                           imageProvider: _providerForPage(underPage),
                           pageNumber: underPage,
-                          nightMode: _nightMode,
+                          palette: palette,
                           scale: _pageScale,
                           progress: _progress,
                         ),
@@ -625,39 +734,207 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                         progress: isTurning ? _progress : 0.0,
                         dyRatio: _dyRatio,
                         touchXRatio: _touchXRatio,
-                        nightMode: _nightMode,
+                        palette: palette,
                         scale: _pageScale,
                       ),
+
+                      // علامة الحفظ على شكل حبل أحمر ينزل على الصفحة المحفوظة
+                      if (hasBookmarkOnCurrent)
+                        _RedBookmarkCordOverlay(
+                          pageHeight: height,
+                          dropRatio: _ribbonDropRatio,
+                          onDropRatioChanged: (newRatio) {
+                            setState(() => _ribbonDropRatio = newRatio);
+                          },
+                          onDragEnd: _saveState,
+                          onTap: _toggleBookmark,
+                        ),
                     ],
                   ),
                 );
               },
             ),
           ),
-          _BottomBar(
-            textColor: textColor,
-            accentColor: accentColor,
-            bgColor: bgColor,
-            wirdRead: _wirdReadToday,
-            wirdGoal: _dailyWirdGoalPages,
-            onOpenSurahs: _openSurahs,
-            onOpenJuz: _openJuz,
-            onOpenWird: _openWird,
-            onOpenScale: _openScale,
-          ),
+          // الشريط السفلي مخفي افتراضياً ويظهر عند التفعيل
+          if (_showBottomBar)
+            _BottomBar(
+              palette: palette,
+              wirdRead: _wirdReadToday,
+              wirdGoal: _dailyWirdGoalPages,
+              onOpenSurahs: () => _openSurahs(palette),
+              onOpenJuz: () => _openJuz(palette),
+              onOpenWird: _openWird,
+              onOpenScale: () => _openScale(palette),
+            ),
         ],
       ),
     );
   }
 
-  void _openSurahs() {
+  void _openThemeCustomizer(PageThemePalette currentPalette) {
+    double tempHue = _themeHue;
+    double tempShade = _themeShade;
+    String tempPresetId = _selectedThemeId;
+
     showModalBottomSheet(
       context: context,
-      backgroundColor:
-          _nightMode ? const Color(0xFF1A1D22) : const Color(0xFFFAF5EA),
+      backgroundColor: currentPalette.paper,
+      isScrollControlled: true,
       builder: (ctx) {
-        final fg =
-            _nightMode ? const Color(0xFFE7DFC8) : const Color(0xFF231F1A);
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: StatefulBuilder(
+            builder: (context, setLocal) {
+              final livePalette = PageThemePalette.fromHueAndShade(
+                hue: tempHue,
+                shade: tempShade,
+              );
+
+              return Container(
+                color: livePalette.paper,
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'ثيم الصفحة (اللون والتدريجة)',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                            color: livePalette.ink,
+                          ),
+                        ),
+                        Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: livePalette.background,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: livePalette.accent, width: 1.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: kPageThemePresets.map((preset) {
+                        final bool selected = tempPresetId == preset.id;
+                        final pCol = PageThemePalette.fromHueAndShade(
+                          hue: preset.hue,
+                          shade: preset.shade,
+                        );
+                        return ChoiceChip(
+                          selected: selected,
+                          label: Text(preset.name),
+                          selectedColor: pCol.accent.withValues(alpha: 0.22),
+                          backgroundColor: pCol.background,
+                          labelStyle: TextStyle(
+                            color: livePalette.ink,
+                            fontWeight:
+                                selected ? FontWeight.bold : FontWeight.normal,
+                          ),
+                          onSelected: (_) {
+                            setLocal(() {
+                              tempPresetId = preset.id;
+                              tempHue = preset.hue;
+                              tempShade = preset.shade;
+                            });
+                            setState(() {
+                              _selectedThemeId = preset.id;
+                              _themeHue = preset.hue;
+                              _themeShade = preset.shade;
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'اللون: ${tempHue.round()}°',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: livePalette.ink,
+                      ),
+                    ),
+                    Slider(
+                      min: 0.0,
+                      max: 360.0,
+                      value: tempHue,
+                      activeColor: livePalette.accent,
+                      onChanged: (v) {
+                        setLocal(() {
+                          tempHue = v;
+                          tempPresetId = 'custom';
+                        });
+                        setState(() {
+                          _themeHue = v;
+                          _selectedThemeId = 'custom';
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'التدريجة: ${(tempShade * 100).round()}%',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: livePalette.ink,
+                      ),
+                    ),
+                    Slider(
+                      min: 0.0,
+                      max: 1.0,
+                      divisions: 20,
+                      value: tempShade,
+                      activeColor: livePalette.accent,
+                      onChanged: (v) {
+                        setLocal(() {
+                          tempShade = v;
+                          tempPresetId = 'custom';
+                        });
+                        setState(() {
+                          _themeShade = v;
+                          _selectedThemeId = 'custom';
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: livePalette.accent,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () {
+                          _saveState();
+                          Navigator.pop(ctx);
+                        },
+                        child: const Text('حفظ الثيم'),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  void _openSurahs(PageThemePalette palette) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: palette.paper,
+      builder: (ctx) {
         return Directionality(
           textDirection: TextDirection.rtl,
           child: Column(
@@ -667,29 +944,33 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                 child: Text(
                   'فهرس السور',
                   style: TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.bold, color: fg),
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: palette.ink),
                 ),
               ),
               Expanded(
                 child: ListView.separated(
                   itemCount: kSurahs.length,
-                  separatorBuilder: (_, __) =>
-                      Divider(height: 1, color: fg.withValues(alpha: 0.1)),
+                  separatorBuilder: (_, __) => Divider(
+                      height: 1, color: palette.ink.withValues(alpha: 0.12)),
                   itemBuilder: (_, i) {
                     final s = kSurahs[i];
                     return ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: fg.withValues(alpha: 0.12),
+                        backgroundColor: palette.ink.withValues(alpha: 0.12),
                         child: Text('${s.number}',
-                            style: TextStyle(color: fg, fontSize: 13)),
+                            style: TextStyle(color: palette.ink, fontSize: 13)),
                       ),
                       title: Text(s.name,
-                          style:
-                              TextStyle(color: fg, fontWeight: FontWeight.w600)),
+                          style: TextStyle(
+                              color: palette.ink, fontWeight: FontWeight.w600)),
                       subtitle: Text(s.revelationType,
-                          style: TextStyle(color: fg.withValues(alpha: 0.65))),
+                          style: TextStyle(
+                              color: palette.ink.withValues(alpha: 0.68))),
                       trailing: Text('ص ${s.startPage}',
-                          style: TextStyle(color: fg.withValues(alpha: 0.8))),
+                          style: TextStyle(
+                              color: palette.ink.withValues(alpha: 0.85))),
                       onTap: () {
                         Navigator.pop(ctx);
                         _jumpToPage(s.startPage);
@@ -705,14 +986,11 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     );
   }
 
-  void _openJuz() {
+  void _openJuz(PageThemePalette palette) {
     showModalBottomSheet(
       context: context,
-      backgroundColor:
-          _nightMode ? const Color(0xFF1A1D22) : const Color(0xFFFAF5EA),
+      backgroundColor: palette.paper,
       builder: (ctx) {
-        final fg =
-            _nightMode ? const Color(0xFFE7DFC8) : const Color(0xFF231F1A);
         return Directionality(
           textDirection: TextDirection.rtl,
           child: Column(
@@ -722,27 +1000,30 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                 child: Text(
                   'أجزاء المصحف الثلاثون',
                   style: TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.bold, color: fg),
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: palette.ink),
                 ),
               ),
               Expanded(
                 child: ListView.separated(
                   itemCount: kJuzList.length,
-                  separatorBuilder: (_, __) =>
-                      Divider(height: 1, color: fg.withValues(alpha: 0.1)),
+                  separatorBuilder: (_, __) => Divider(
+                      height: 1, color: palette.ink.withValues(alpha: 0.12)),
                   itemBuilder: (_, i) {
                     final j = kJuzList[i];
                     return ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: fg.withValues(alpha: 0.12),
+                        backgroundColor: palette.ink.withValues(alpha: 0.12),
                         child: Text('${j.number}',
-                            style: TextStyle(color: fg, fontSize: 13)),
+                            style: TextStyle(color: palette.ink, fontSize: 13)),
                       ),
                       title: Text(j.title,
-                          style:
-                              TextStyle(color: fg, fontWeight: FontWeight.w600)),
+                          style: TextStyle(
+                              color: palette.ink, fontWeight: FontWeight.w600)),
                       trailing: Text('تبدأ من ص ${j.startPage}',
-                          style: TextStyle(color: fg.withValues(alpha: 0.8))),
+                          style: TextStyle(
+                              color: palette.ink.withValues(alpha: 0.85))),
                       onTap: () {
                         Navigator.pop(ctx);
                         _jumpToPage(j.startPage);
@@ -804,15 +1085,12 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     );
   }
 
-  void _openScale() {
+  void _openScale(PageThemePalette palette) {
     double tempScale = _pageScale;
     showModalBottomSheet(
       context: context,
-      backgroundColor:
-          _nightMode ? const Color(0xFF1A1D22) : const Color(0xFFFAF5EA),
+      backgroundColor: palette.paper,
       builder: (ctx) {
-        final fg =
-            _nightMode ? const Color(0xFFE7DFC8) : const Color(0xFF231F1A);
         return Directionality(
           textDirection: TextDirection.rtl,
           child: StatefulBuilder(
@@ -824,13 +1102,16 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                   Text(
                     'حجم عرض الصفحة: ${(tempScale * 100).round()}%',
                     style: TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold, color: fg),
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: palette.ink),
                   ),
                   Slider(
                     min: 0.9,
                     max: 1.25,
                     divisions: 14,
                     value: tempScale,
+                    activeColor: palette.accent,
                     onChanged: (v) {
                       setLocal(() => tempScale = v);
                       setState(() => _pageScale = v);
@@ -839,6 +1120,10 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                   Align(
                     alignment: Alignment.centerLeft,
                     child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: palette.accent,
+                        foregroundColor: Colors.white,
+                      ),
                       onPressed: () {
                         _saveState();
                         Navigator.pop(ctx);
@@ -862,17 +1147,128 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   }
 }
 
+/// علامة الحفظ على شكل حبل أحمر ينزل من أعلى الصفحة مع إمكانية سحب طوله أو إزالته
+class _RedBookmarkCordOverlay extends StatelessWidget {
+  final double pageHeight;
+  final double dropRatio;
+  final ValueChanged<double> onDropRatioChanged;
+  final VoidCallback onDragEnd;
+  final VoidCallback onTap;
+
+  const _RedBookmarkCordOverlay({
+    required this.pageHeight,
+    required this.dropRatio,
+    required this.onDropRatioChanged,
+    required this.onDragEnd,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final double usableH = math.max(120.0, pageHeight);
+    final double cordLength = (usableH * dropRatio).clamp(64.0, usableH * 0.85);
+
+    return Positioned(
+      top: 0,
+      left: 34,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: onTap,
+        onVerticalDragUpdate: (details) {
+          final double nextLength =
+              (cordLength + details.delta.dy).clamp(64.0, usableH * 0.85);
+          onDropRatioChanged((nextLength / usableH).clamp(0.14, 0.82));
+        },
+        onVerticalDragEnd: (_) => onDragEnd(),
+        child: CustomPaint(
+          size: Size(26, cordLength + 18),
+          painter: _RedCordPainter(cordLength: cordLength),
+        ),
+      ),
+    );
+  }
+}
+
+class _RedCordPainter extends CustomPainter {
+  final double cordLength;
+
+  _RedCordPainter({required this.cordLength});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const double cordWidth = 7.0;
+    final double centerX = size.width * 0.5;
+    final double leftX = centerX - cordWidth * 0.5;
+    final double rightX = centerX + cordWidth * 0.5;
+
+    // ظل ناعم للحبل الأحمر على الورقة
+    final Path shadowPath = Path()
+      ..moveTo(leftX + 1.5, 0)
+      ..lineTo(rightX + 1.5, 0)
+      ..lineTo(rightX + 1.5, cordLength)
+      ..lineTo(centerX + 1.5, cordLength + 12)
+      ..lineTo(leftX + 1.5, cordLength)
+      ..close();
+
+    canvas.drawPath(
+      shadowPath,
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.24)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0),
+    );
+
+    // جسم الحبل الأحمر بتدرج لوني يعطي إحساساً بخيط/حبل قماشي نازل
+    final Rect cordRect = Rect.fromLTRB(leftX, 0, rightX, cordLength + 12);
+    final Paint cordPaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(leftX, 0),
+        Offset(rightX, 0),
+        const [
+          Color(0xFF9E1B1B),
+          Color(0xFFE63946),
+          Color(0xFFB81D24),
+        ],
+        const [0.0, 0.45, 1.0],
+      );
+
+    final Path cordPath = Path()
+      ..moveTo(leftX, 0)
+      ..lineTo(rightX, 0)
+      ..lineTo(rightX, cordLength)
+      ..lineTo(centerX, cordLength + 12)
+      ..lineTo(leftX, cordLength)
+      ..close();
+
+    canvas.drawPath(cordPath, cordPaint);
+
+    // عقدة/تفصيل صغير أسفل الحبل
+    canvas.drawCircle(
+      Offset(centerX, cordLength + 13),
+      3.0,
+      Paint()
+        ..color = const Color(0xFF8C1414)
+        ..shader = null,
+    );
+    // ضمان بقاء التدرج نظيفاً وعدم تداخل مستطيل
+    if (cordRect.isEmpty) return;
+  }
+
+  @override
+  bool shouldRepaint(covariant _RedCordPainter oldDelegate) =>
+      oldDelegate.cordLength != cordLength;
+}
+
 class _NextPageUnderlay extends StatelessWidget {
   final ImageProvider imageProvider;
   final int pageNumber;
-  final bool nightMode;
+  final PageThemePalette palette;
   final double scale;
   final double progress;
 
   const _NextPageUnderlay({
     required this.imageProvider,
     required this.pageNumber,
-    required this.nightMode,
+    required this.palette,
     required this.scale,
     required this.progress,
   });
@@ -887,7 +1283,7 @@ class _NextPageUnderlay extends StatelessWidget {
           child: MushafSingleSheet(
             imageProvider: imageProvider,
             pageNumber: pageNumber,
-            nightMode: nightMode,
+            palette: palette,
             scale: scale,
           ),
         ),
@@ -912,7 +1308,7 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
   final double progress;
   final double dyRatio;
   final double touchXRatio;
-  final bool nightMode;
+  final PageThemePalette palette;
   final double scale;
 
   const _RealisticPaperCurlEngine({
@@ -926,7 +1322,7 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
     required this.progress,
     required this.dyRatio,
     required this.touchXRatio,
-    required this.nightMode,
+    required this.palette,
     required this.scale,
   });
 
@@ -937,7 +1333,7 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
         child: MushafSingleSheet(
           imageProvider: currentProvider,
           pageNumber: currentPage,
-          nightMode: nightMode,
+          palette: palette,
           scale: scale,
         ),
       );
@@ -951,7 +1347,6 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
       touchXRatio: touchXRatio,
     );
 
-    // ميل ثلاثي الأبعاد خفيف للجزء المنثني يعزز عمق الورقة مع الانحناء القطري
     final double liftAngleY =
         -direction * (0.28 * math.sin(progress * math.pi * 0.65));
     final double tiltAngleX = (dyRatio - 0.5) * 0.14 * progress;
@@ -963,18 +1358,12 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 1. ظل ناعم ومتدرج على الصفحة التالية أسفل منطقة الانحناء والرفع
         IgnorePointer(
           child: CustomPaint(
             size: Size(width, height),
-            painter: _UnderPageCastShadowPainter(
-              model: model,
-              nightMode: nightMode,
-            ),
+            painter: _UnderPageCastShadowPainter(model: model),
           ),
         ),
-
-        // 2. الجزء الثابت/المنتقل من الورقة الحالية مع انحناء قطري وإضاءة سطحية
         ClipPath(
           clipper: _FrontBodyClipper(model: model),
           child: Stack(
@@ -984,24 +1373,19 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
                 child: MushafSingleSheet(
                   imageProvider: currentProvider,
                   pageNumber: currentPage,
-                  nightMode: nightMode,
+                  palette: palette,
                   scale: scale,
                 ),
               ),
               IgnorePointer(
                 child: CustomPaint(
                   size: Size(width, height),
-                  painter: _FrontSurfaceLightingPainter(
-                    model: model,
-                    nightMode: nightMode,
-                  ),
+                  painter: _FrontSurfaceLightingPainter(model: model),
                 ),
               ),
             ],
           ),
         ),
-
-        // 3. الوجه الخلفي للورقة المنثنية: انعكاس أفقي + انحناء قطري + إضاءة وظلال التجعد
         ClipPath(
           clipper: _CurledBackClipper(model: model),
           child: Transform(
@@ -1015,12 +1399,12 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
                   alignment: Alignment.center,
                   transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
                   child: Opacity(
-                    opacity: nightMode ? 0.36 : 0.48,
+                    opacity: 0.46,
                     child: RepaintBoundary(
                       child: MushafSingleSheet(
                         imageProvider: backProvider,
                         pageNumber: backPage,
-                        nightMode: nightMode,
+                        palette: palette,
                         scale: scale,
                       ),
                     ),
@@ -1031,7 +1415,7 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
                     size: Size(width, height),
                     painter: _BackFaceShadingPainter(
                       model: model,
-                      nightMode: nightMode,
+                      paperTint: palette.backFaceTint,
                     ),
                   ),
                 ),
@@ -1046,22 +1430,19 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
 
 class _CurlMeshModel {
   final Size size;
-  final int direction; // -1: مسك من اليسار وسحب لليمين | +1: مسك من اليمين وسحب لليسار
-  final double progress; // 0.0 .. 1.0
-  final double dyRatio; // 0.06 .. 0.94
+  final int direction;
+  final double progress;
+  final double dyRatio;
   final double touchXRatio;
 
-  // نقاط خط الثنية القطري المنحني
   final Offset creaseTop;
   final Offset creaseMid;
   final Offset creaseBottom;
 
-  // نقاط الحافة الخارجية الملتفة للورقة
   final Offset edgeTop;
   final Offset edgeMid;
   final Offset edgeBottom;
 
-  // مقدار التقوّس والالتفاف
   final double curlDepth;
   final double bowMagnitude;
 
@@ -1092,24 +1473,20 @@ class _CurlMeshModel {
     final double h = size.height;
     final double p = progress.clamp(0.0, 1.0);
 
-    // ميل قطري طبيعي بحسب موضع الإصبع رأسياً وأفقياً
-    final double verticalBias = (dyRatio - 0.5) * 2.0; // -1 أعلى .. +1 أسفل
+    final double verticalBias = (dyRatio - 0.5) * 2.0;
     final double horizontalBias = (touchXRatio - 0.5).abs();
     final double diagonalSkew =
         verticalBias * w * (0.24 + 0.08 * horizontalBias) * p;
 
-    // تقوّس منحني للورقة يبلغ ذروته في منتصف التقليب ويستقر عند النهاية
     final double archFactor = math.sin(p * math.pi * 0.82);
     final double bow = w * 0.11 * archFactor;
 
-    // عمق الجزء المنثني (الورقة المرفوعة والمطوية)
     final double flapDepth =
         (w * (0.14 + 0.34 * math.pow(p, 0.85))).clamp(18.0, w * 0.52);
 
     final double fy = (h * dyRatio).clamp(h * 0.08, h * 0.92);
 
     if (direction < 0) {
-      // مسك من الحافة اليسرى وسحب يميناً: خط الثنية يتحرك من اليسار نحو اليمين
       final double baseX = w * (0.04 + 0.88 * p);
       final double topX = (baseX - diagonalSkew).clamp(0.0, w);
       final double botX = (baseX + diagonalSkew).clamp(0.0, w);
@@ -1136,7 +1513,6 @@ class _CurlMeshModel {
         bowMagnitude: bow,
       );
     } else {
-      // مسك من الحافة اليمنى وسحب يساراً: خط الثنية يتحرك من اليمين نحو اليسار
       final double baseX = w * (0.96 - 0.88 * p);
       final double topX = (baseX + diagonalSkew).clamp(0.0, w);
       final double botX = (baseX - diagonalSkew).clamp(0.0, w);
@@ -1191,7 +1567,6 @@ class _CurlMeshModel {
   Path frontBodyRegion() {
     final Path path = Path();
     if (direction < 0) {
-      // سحب من اليسار لليمين: الجزء الأمامي يقع على يمين خط الثنية
       path.moveTo(creaseTop.dx, creaseTop.dy);
       path.lineTo(size.width, 0);
       path.lineTo(size.width, size.height);
@@ -1200,7 +1575,6 @@ class _CurlMeshModel {
           creaseMid.dx, creaseMid.dy, creaseTop.dx, creaseTop.dy);
       path.close();
     } else {
-      // سحب من اليمين لليسار: الجزء الأمامي يقع على يسار خط الثنية
       path.moveTo(0, 0);
       path.lineTo(creaseTop.dx, creaseTop.dy);
       path.quadraticBezierTo(
@@ -1253,12 +1627,8 @@ class _CurledBackClipper extends CustomClipper<Path> {
 
 class _UnderPageCastShadowPainter extends CustomPainter {
   final _CurlMeshModel model;
-  final bool nightMode;
 
-  _UnderPageCastShadowPainter({
-    required this.model,
-    required this.nightMode,
-  });
+  _UnderPageCastShadowPainter({required this.model});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1266,9 +1636,8 @@ class _UnderPageCastShadowPainter extends CustomPainter {
 
     final double lift = math.sin(model.progress * math.pi * 0.75);
     final double shadowWidth = (18.0 + 22.0 * lift).clamp(8.0, 40.0);
-    final double alpha = ((nightMode ? 0.42 : 0.30) * lift).clamp(0.0, 0.45);
+    final double alpha = (0.30 * lift).clamp(0.0, 0.36);
 
-    // ظل ناعم ممتد من خط الثنية فوق الصفحة التالية
     canvas.drawPath(
       model.creaseCurve(),
       Paint()
@@ -1278,7 +1647,6 @@ class _UnderPageCastShadowPainter extends CustomPainter {
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, shadowWidth * 0.65),
     );
 
-    // ظل إضافي خفيف تحت الحافة الملتفة للورقة
     canvas.drawPath(
       model.outerEdgeCurve(),
       Paint()
@@ -1291,17 +1659,13 @@ class _UnderPageCastShadowPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _UnderPageCastShadowPainter oldDelegate) =>
-      oldDelegate.model != model || oldDelegate.nightMode != nightMode;
+      oldDelegate.model != model;
 }
 
 class _FrontSurfaceLightingPainter extends CustomPainter {
   final _CurlMeshModel model;
-  final bool nightMode;
 
-  _FrontSurfaceLightingPainter({
-    required this.model,
-    required this.nightMode,
-  });
+  _FrontSurfaceLightingPainter({required this.model});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1312,7 +1676,6 @@ class _FrontSurfaceLightingPainter extends CustomPainter {
     final double startX = (midX - band * model.direction).clamp(0.0, size.width);
     final double endX = (midX + band * model.direction).clamp(0.0, size.width);
 
-    // إضاءة ناعمة قرب منطقة الانحناء لإبراز تقوّس الورقة
     final Rect lightRect = Rect.fromLTRB(
       math.min(startX, endX),
       0,
@@ -1328,20 +1691,17 @@ class _FrontSurfaceLightingPainter extends CustomPainter {
           model.creaseMid.dy,
         ),
         [
-          (nightMode ? Colors.white : const Color(0xFFFFFDF8))
-              .withValues(alpha: (nightMode ? 0.14 : 0.24) * model.progress),
+          const Color(0xFFFFFDF8).withValues(alpha: 0.24 * model.progress),
           Colors.transparent,
         ],
       );
 
     canvas.drawRect(lightRect, highlightPaint);
 
-    // خط اتصال/تجعد ناعم على حافة الانحناء
     canvas.drawPath(
       model.creaseCurve(),
       Paint()
-        ..color = (nightMode ? Colors.black : const Color(0xFF4A3519))
-            .withValues(alpha: (nightMode ? 0.35 : 0.22) * model.progress)
+        ..color = const Color(0xFF4A3519).withValues(alpha: 0.22 * model.progress)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.6
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
@@ -1350,16 +1710,16 @@ class _FrontSurfaceLightingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _FrontSurfaceLightingPainter oldDelegate) =>
-      oldDelegate.model != model || oldDelegate.nightMode != nightMode;
+      oldDelegate.model != model;
 }
 
 class _BackFaceShadingPainter extends CustomPainter {
   final _CurlMeshModel model;
-  final bool nightMode;
+  final Color paperTint;
 
   _BackFaceShadingPainter({
     required this.model,
-    required this.nightMode,
+    required this.paperTint,
   });
 
   @override
@@ -1370,34 +1730,27 @@ class _BackFaceShadingPainter extends CustomPainter {
     final Rect bounds = flapPath.getBounds();
     if (bounds.width <= 0 || bounds.height <= 0) return;
 
-    final Color paperTint =
-        nightMode ? const Color(0xFF1D2229) : const Color(0xFFF3E8D2);
-
-    // طبقة ورق خفيفة للوجه الخلفي للورقة المنثنية
     canvas.drawPath(
       flapPath,
       Paint()
-        ..color = paperTint.withValues(alpha: nightMode ? 0.56 : 0.48)
+        ..color = paperTint.withValues(alpha: 0.50)
         ..style = PaintingStyle.fill,
     );
 
-    // تدرج ضوئي وتجعد داخل الجزء المنثني لإبراز التفاف الورقة
     final Paint gradientPaint = Paint()
       ..shader = ui.Gradient.linear(
         model.creaseMid,
         model.edgeMid,
         [
-          Colors.black.withValues(alpha: (nightMode ? 0.34 : 0.24) * model.progress),
-          (nightMode ? Colors.white : const Color(0xFFFFFCF5))
-              .withValues(alpha: (nightMode ? 0.10 : 0.18) * model.progress),
-          Colors.black.withValues(alpha: (nightMode ? 0.28 : 0.20) * model.progress),
+          Colors.black.withValues(alpha: 0.24 * model.progress),
+          const Color(0xFFFFFCF5).withValues(alpha: 0.18 * model.progress),
+          Colors.black.withValues(alpha: 0.20 * model.progress),
         ],
         const [0.0, 0.45, 1.0],
       );
 
     canvas.drawPath(flapPath, gradientPaint);
 
-    // ظل ناعم على الحافة الخارجية للورقة الملتفة
     canvas.drawPath(
       model.outerEdgeCurve(),
       Paint()
@@ -1410,31 +1763,25 @@ class _BackFaceShadingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _BackFaceShadingPainter oldDelegate) =>
-      oldDelegate.model != model || oldDelegate.nightMode != nightMode;
+      oldDelegate.model != model || oldDelegate.paperTint != paperTint;
 }
 
 class MushafSingleSheet extends StatelessWidget {
   final ImageProvider? imageProvider;
   final int pageNumber;
-  final bool nightMode;
+  final PageThemePalette palette;
   final double scale;
 
   const MushafSingleSheet({
     super.key,
     this.imageProvider,
     required this.pageNumber,
-    required this.nightMode,
+    required this.palette,
     required this.scale,
   });
 
   @override
   Widget build(BuildContext context) {
-    final Color paper =
-        nightMode ? const Color(0xFF15181C) : const Color(0xFFFAF4E6);
-    final Color outerFrame =
-        nightMode ? const Color(0xFFC59B27) : const Color(0xFF8A5A1E);
-    final Color innerFrame =
-        nightMode ? const Color(0xFF8F6E1B) : const Color(0xFFB6833A);
     final String assetPath = 'assets/images/quran/$pageNumber.png';
     final ImageProvider resolvedProvider =
         imageProvider ?? AssetImage(assetPath);
@@ -1442,13 +1789,13 @@ class MushafSingleSheet extends StatelessWidget {
     return Transform.scale(
       scale: scale,
       child: Container(
-        color: paper,
+        color: palette.paper,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: CustomPaint(
           painter: _QuranFramePainter(
-            outerColor: outerFrame,
-            innerColor: innerFrame,
-            paperColor: paper,
+            outerColor: palette.outerFrame,
+            innerColor: palette.innerFrame,
+            paperColor: palette.paper,
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
@@ -1464,7 +1811,7 @@ class MushafSingleSheet extends StatelessWidget {
                       Icon(
                         Icons.auto_stories,
                         size: 44,
-                        color: outerFrame.withValues(alpha: 0.7),
+                        color: palette.outerFrame.withValues(alpha: 0.7),
                       ),
                       const SizedBox(height: 10),
                       Text(
@@ -1472,9 +1819,7 @@ class MushafSingleSheet extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: nightMode
-                              ? const Color(0xFFE7DFC8)
-                              : const Color(0xFF231F1A),
+                          color: palette.ink,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -1482,10 +1827,7 @@ class MushafSingleSheet extends StatelessWidget {
                         assetPath,
                         style: TextStyle(
                           fontSize: 12,
-                          color: (nightMode
-                                  ? const Color(0xFFE7DFC8)
-                                  : const Color(0xFF231F1A))
-                              .withValues(alpha: 0.65),
+                          color: palette.ink.withValues(alpha: 0.65),
                         ),
                       ),
                     ],
@@ -1577,9 +1919,7 @@ class _QuranFramePainter extends CustomPainter {
 }
 
 class _BottomBar extends StatelessWidget {
-  final Color textColor;
-  final Color accentColor;
-  final Color bgColor;
+  final PageThemePalette palette;
   final int wirdRead;
   final int wirdGoal;
   final VoidCallback onOpenSurahs;
@@ -1588,9 +1928,7 @@ class _BottomBar extends StatelessWidget {
   final VoidCallback onOpenScale;
 
   const _BottomBar({
-    required this.textColor,
-    required this.accentColor,
-    required this.bgColor,
+    required this.palette,
     required this.wirdRead,
     required this.wirdGoal,
     required this.onOpenSurahs,
@@ -1607,8 +1945,9 @@ class _BottomBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: bgColor,
-        border: Border(top: BorderSide(color: textColor.withValues(alpha: 0.12))),
+        color: palette.background,
+        border:
+            Border(top: BorderSide(color: palette.ink.withValues(alpha: 0.12))),
       ),
       child: SafeArea(
         top: false,
@@ -1620,7 +1959,7 @@ class _BottomBar extends StatelessWidget {
                 Text(
                   'الورد اليومي: $wirdRead / $wirdGoal صفحة',
                   style: TextStyle(
-                      fontSize: 12, color: textColor.withValues(alpha: 0.85)),
+                      fontSize: 12, color: palette.ink.withValues(alpha: 0.85)),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -1629,8 +1968,8 @@ class _BottomBar extends StatelessWidget {
                     child: LinearProgressIndicator(
                       value: ratio,
                       minHeight: 6,
-                      backgroundColor: textColor.withValues(alpha: 0.12),
-                      valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                      backgroundColor: palette.ink.withValues(alpha: 0.12),
+                      valueColor: AlwaysStoppedAnimation<Color>(palette.accent),
                     ),
                   ),
                 ),
@@ -1643,22 +1982,22 @@ class _BottomBar extends StatelessWidget {
                 _BarBtn(
                     icon: Icons.menu_book_outlined,
                     label: 'الفهرس',
-                    color: textColor,
+                    color: palette.ink,
                     onTap: onOpenSurahs),
                 _BarBtn(
                     icon: Icons.grid_view_outlined,
                     label: 'الأجزاء',
-                    color: textColor,
+                    color: palette.ink,
                     onTap: onOpenJuz),
                 _BarBtn(
                     icon: Icons.track_changes_outlined,
                     label: 'الورد',
-                    color: textColor,
+                    color: palette.ink,
                     onTap: onOpenWird),
                 _BarBtn(
                     icon: Icons.zoom_in_outlined,
                     label: 'الحجم',
-                    color: textColor,
+                    color: palette.ink,
                     onTap: onOpenScale),
               ],
             ),
