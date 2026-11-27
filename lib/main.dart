@@ -226,8 +226,9 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   bool _nightMode = false;
   double _pageScale = 1.0;
 
-  int _dragDirection = 0;
-  double _dragProgress = 0.0;
+  double _dragStartX = 0.0;
+  int _dragDirection = 0; // -1 للصفحة التالية، +1 للصفحة السابقة، 0 بلا سحب نشط
+  double _dragProgress = 0.0; // من 0.0 إلى 1.0
   double _pointerDyRatio = 0.5;
   bool _isAnimatingCommit = false;
 
@@ -240,7 +241,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     super.initState();
     _settleController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 260),
+      duration: const Duration(milliseconds: 240),
     )
       ..addListener(_onSettleTick)
       ..addStatusListener(_onSettleStatus);
@@ -361,48 +362,82 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       _settleController.stop();
     }
     setState(() {
+      _dragStartX = details.localPosition.dx;
       _dragDirection = 0;
       _dragProgress = 0.0;
-      _pointerDyRatio = (details.localPosition.dy / height).clamp(0.0, 1.0);
+      _pointerDyRatio =
+          height > 0 ? (details.localPosition.dy / height).clamp(0.0, 1.0) : 0.5;
     });
   }
 
   void _handlePanUpdate(DragUpdateDetails details, double width, double height) {
     if (_isAnimatingCommit || width <= 0) return;
 
-    final double dx = details.delta.dx;
-    final double dyRatio = (details.localPosition.dy / height).clamp(0.0, 1.0);
+    final double totalDx = details.localPosition.dx - _dragStartX;
+    final double dyRatio =
+        height > 0 ? (details.localPosition.dy / height).clamp(0.0, 1.0) : 0.5;
 
-    if (_dragDirection == 0 && dx.abs() > 1.5) {
-      final int candidateDir = dx < 0 ? -1 : 1;
+    int activeDir = _dragDirection;
+    if (activeDir == 0 && totalDx.abs() > 4.0) {
+      // السحب يساراً (totalDx < 0) يقلب للصفحة التالية (_dragDirection = -1)
+      // السحب يميناً (totalDx > 0) يرجع للصفحة السابقة (_dragDirection = +1)
+      final int candidateDir = totalDx < 0 ? -1 : 1;
       final int targetPage = _currentPage - candidateDir;
       if (targetPage >= 1 && targetPage <= totalPages) {
-        _dragDirection = candidateDir;
+        activeDir = candidateDir;
       }
     }
 
-    if (_dragDirection == 0) {
+    if (activeDir == 0) {
       setState(() {
         _pointerDyRatio = dyRatio;
       });
       return;
     }
 
-    final double deltaProgress = (-dx * _dragDirection) / (width * 0.85);
+    final double progress =
+        ((-totalDx * activeDir) / (width * 0.65)).clamp(0.0, 1.0);
+
     setState(() {
+      _dragDirection = activeDir;
       _pointerDyRatio = dyRatio;
-      _dragProgress = (_dragProgress + deltaProgress).clamp(0.0, 1.0);
+      _dragProgress = progress;
     });
   }
 
   void _handlePanEnd(DragEndDetails details) {
-    if (_isAnimatingCommit || _dragDirection == 0) return;
+    if (_isAnimatingCommit) return;
 
-    final double velocity = details.primaryVelocity ?? 0.0;
-    final double directionalVelocity = -velocity * _dragDirection;
+    if (_dragDirection == 0) {
+      final double vx = details.velocity.pixelsPerSecond.dx;
+      if (vx.abs() > 250) {
+        final int candidateDir = vx < 0 ? -1 : 1;
+        final int targetPage = _currentPage - candidateDir;
+        if (targetPage >= 1 && targetPage <= totalPages) {
+          _dragDirection = candidateDir;
+          _dragProgress = 0.25;
+          _commitTargetReached = true;
+          _isAnimatingCommit = true;
+          _settleAnimation = Tween<double>(
+            begin: _dragProgress,
+            end: 1.0,
+          ).animate(
+            CurvedAnimation(
+              parent: _settleController,
+              curve: Curves.easeOutCubic,
+            ),
+          );
+          _settleController.forward(from: 0.0);
+        }
+      }
+      return;
+    }
+
+    final double vx = details.velocity.pixelsPerSecond.dx;
+    final double directionalVelocity = -vx * _dragDirection;
 
     final bool shouldCommit =
-        _dragProgress >= 0.36 || directionalVelocity > 450;
+        _dragProgress >= 0.28 || directionalVelocity > 300;
 
     _commitTargetReached = shouldCommit;
     _isAnimatingCommit = true;
@@ -611,7 +646,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     final double verticalFactor = (pointerDyRatio - 0.5) * 2.0;
     final double angleX = -verticalFactor * progress * 0.14;
 
-    final double translateX = dragDirection * progress * (width * 0.68);
+    final double translateX = dragDirection * progress * (width * 0.72);
     final double translateY = verticalFactor * progress * (height * 0.04);
 
     final double pivotX = dragDirection < 0 ? 0.85 : 0.15;
