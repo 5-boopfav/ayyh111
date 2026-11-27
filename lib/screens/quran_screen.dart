@@ -32,7 +32,6 @@ class _QuranScreenState extends State<QuranScreen>
   int _dailyWirdPages = 20;
   double _fontScale = 1.0;
 
-  // حالة حركة انحناء الصفحة أثناء السحب
   bool _isDragging = false;
   bool _dragForward = true;
   double _dragProgress = 0.0;
@@ -179,7 +178,6 @@ class _QuranScreenState extends State<QuranScreen>
     if (!_isDragging || width <= 0) return;
     final deltaX = details.globalPosition.dx - _dragStartX;
 
-    // في الاتجاه العربي RTL: السحب لليسار ينتقل للصفحة التالية، ولليمين للسابقة
     if (deltaX < 0 && _currentPage < _totalPages) {
       _dragForward = true;
       _dragProgress = (-deltaX / width).clamp(0.0, 1.0);
