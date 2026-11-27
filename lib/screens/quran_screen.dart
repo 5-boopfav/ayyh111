@@ -93,8 +93,7 @@ class _QuranScreenState extends State<QuranScreen>
     final data = await LocalIslamicRepository.instance.loadQuranPages();
     if (!mounted) return;
 
-    final Map<int, QuranPageData> loadedMap =
-        data is Map<int, QuranPageData> ? data : const <int, QuranPageData>{};
+    final Map<int, QuranPageData> loadedMap = data;
 
     int initialPage = _currentPage;
     if (loadedMap.isNotEmpty && !loadedMap.containsKey(initialPage)) {
@@ -283,10 +282,10 @@ class _QuranScreenState extends State<QuranScreen>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'الختمة • صفحة $_currentPage من $_totalPages',
+                        '${_juzLabel(_juz)} • ص $_currentPage/$_totalPages',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 15,
+                          fontSize: 14,
                         ),
                       ),
                       Row(
@@ -456,7 +455,6 @@ class _QuranScreenState extends State<QuranScreen>
           ),
           child: Column(
             children: [
-              // الشريط العلوي المدمج: بحث + الجزء + السورة + قائمة
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -522,8 +520,6 @@ class _QuranScreenState extends State<QuranScreen>
                   ],
                 ),
               ),
-
-              // نص المصحف الكامل من الأعلى للأسفل
               Expanded(
                 child: _isLoadingData
                     ? const Center(child: CircularProgressIndicator())
@@ -552,8 +548,6 @@ class _QuranScreenState extends State<QuranScreen>
                             ),
                           ),
               ),
-
-              // رقم الصفحة في الأسفل بخط هادئ
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
