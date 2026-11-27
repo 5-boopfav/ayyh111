@@ -218,10 +218,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     with SingleTickerProviderStateMixin {
   static const int totalPages = 604;
 
-  // الصفحة الحالية (من 1 إلى 604)
   int _currentPage = 1;
-
-  // علامة الحفظ والورد اليومي والوضع الليلي وحجم العرض
   int? _bookmarkedPage;
   int _dailyWirdGoalPages = 20;
   int _wirdReadToday = 0;
@@ -229,11 +226,9 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   bool _nightMode = false;
   double _pageScale = 1.0;
 
-  // حالة السحب والانتقال لمرة واحدة دون تكرار أو اهتزاز
-  // اتجاه السحب: -1 لقلب نحو الصفحة التالية، +1 للرجوع نحو الصفحة السابقة، 0 بلا سحب نشط
   int _dragDirection = 0;
-  double _dragProgress = 0.0; // من 0.0 إلى 1.0
-  double _pointerDyRatio = 0.5; // موضع الإصبع عمودياً لتوجيه العطف والمنظور 3D
+  double _dragProgress = 0.0;
+  double _pointerDyRatio = 0.5;
   bool _isAnimatingCommit = false;
 
   late final AnimationController _settleController;
@@ -314,7 +309,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
             _registerWirdProgress();
           }
         }
-        // إنهاء الانتقال لمرة واحدة دون أي ارتداد أو تكرار
         _dragDirection = 0;
         _dragProgress = 0.0;
         _isAnimatingCommit = false;
@@ -361,10 +355,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     _persistPreferences();
   }
 
-  // ==========================================================================
-  // منطق السحب اليدوي والانتقال لمرة واحدة دون اهتزاز أو تكرار
-  // ==========================================================================
-
   void _handlePanStart(DragStartDetails details, double width, double height) {
     if (_isAnimatingCommit) return;
     if (_settleController.isAnimating) {
@@ -383,10 +373,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     final double dx = details.delta.dx;
     final double dyRatio = (details.localPosition.dy / height).clamp(0.0, 1.0);
 
-    // تحديد اتجاه السحب في أول حركة واضحة
     if (_dragDirection == 0 && dx.abs() > 1.5) {
-      // في RTL: السحب لليسار (dx < 0) ينتقل للصفحة التالية (_dragDirection = -1)
-      // والسحب لليمين (dx > 0) يرجع للصفحة السابقة (_dragDirection = +1)
       final int candidateDir = dx < 0 ? -1 : 1;
       final int targetPage = _currentPage - candidateDir;
       if (targetPage >= 1 && targetPage <= totalPages) {
@@ -401,7 +388,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       return;
     }
 
-    // تحويل إزاحة الإصبع إلى نسبة تقدم من 0.0 إلى 1.0
     final double deltaProgress = (-dx * _dragDirection) / (width * 0.85);
     setState(() {
       _pointerDyRatio = dyRatio;
@@ -458,10 +444,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     }
     return current;
   }
-
-  // ==========================================================================
-  // بناء الواجهة وتجميع طبقات الورقة والمنظور 3D والإطار المتحرك
-  // ==========================================================================
 
   @override
   Widget build(BuildContext context) {
@@ -1039,7 +1021,7 @@ class MushafSheetWithFrame extends StatelessWidget {
     final Color frameInnerColor =
         nightMode ? const Color(0xFF8F6E1B) : const Color(0xFFB6833A);
 
-    final String assetPath = 'assets/pages/page_$pageNumber.png';
+    final String assetPath = 'assets/images/quran/$pageNumber.png';
 
     return Transform.scale(
       scale: scale,
