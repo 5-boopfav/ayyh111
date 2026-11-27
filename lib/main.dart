@@ -436,7 +436,11 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
 
     final double x = event.localPosition.dx;
     final double y = event.localPosition.dy;
-    final double ratioY = height > 0 ? (y / height).clamp(0.06, 0.94) : 0.5;
+    final double verticalDeltaRatio =
+        height > 0 ? ((y - _startY) / height) : 0.0;
+    final double baseRatioY = height > 0 ? (y / height) : 0.5;
+    final double ratioY =
+        (baseRatioY + verticalDeltaRatio * 0.35).clamp(0.06, 0.94);
     final double ratioX = (x / width).clamp(0.0, 1.0);
 
     if (_dragDir == 0) {
@@ -948,7 +952,8 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
     );
 
     // ميل ثلاثي الأبعاد خفيف للجزء المنثني يعزز عمق الورقة مع الانحناء القطري
-    final double liftAngleY = -direction * (0.28 * math.sin(progress * math.pi * 0.65));
+    final double liftAngleY =
+        -direction * (0.28 * math.sin(progress * math.pi * 0.65));
     final double tiltAngleX = (dyRatio - 0.5) * 0.14 * progress;
     final Matrix4 backPerspective = Matrix4.identity()
       ..setEntry(3, 2, 0.0012)
