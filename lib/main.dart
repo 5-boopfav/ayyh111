@@ -204,7 +204,7 @@ const List<JuzInfo> kJuzList = [
 ];
 
 // ============================================================================
-// الشاشة الرئيسية لقراءة المصحف (صفحة واحدة بعطف مباشر لحظي وظهر واقعي)
+// الشاشة الرئيسية لقراءة المصحف (تحكم لحظي مباشر وعطف ورق واقعي)
 // ============================================================================
 
 class MushafReaderScreen extends StatefulWidget {
@@ -226,12 +226,11 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   bool _nightMode = false;
   double _pageScale = 1.0;
 
-  // حالة التحكم المباشر بالورقة المنثنية
+  // إحداثيات التحكم المباشر بإصبع المستخدم
   double _dragStartX = 0.0;
-  double _pointerDxRatio = 0.5;
   double _pointerDyRatio = 0.5;
 
-  // -1 للانتقال إلى الصفحة التالية (سحب نحو اليسار)، +1 للرجوع إلى السابقة
+  // -1 للانتقال إلى الصفحة التالية (سحب لليسار)، +1 للرجوع للسابقة (سحب لليمين)
   int _dragDirection = 0;
   double _dragProgress = 0.0;
   bool _isAnimatingSettle = false;
@@ -245,7 +244,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     super.initState();
     _settleController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 240),
+      duration: const Duration(milliseconds: 220),
     )
       ..addListener(_onSettleTick)
       ..addStatusListener(_onSettleStatus);
@@ -361,35 +360,29 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     _persistPreferences();
   }
 
-  void _handlePanStart(DragStartDetails details, double width, double height) {
+  void _beginDragAt(Offset localPos, double height) {
     if (_isAnimatingSettle) return;
     if (_settleController.isAnimating) {
       _settleController.stop();
     }
     setState(() {
-      _dragStartX = details.localPosition.dx;
-      _pointerDxRatio =
-          width > 0 ? (details.localPosition.dx / width).clamp(0.0, 1.0) : 0.5;
-      _pointerDyRatio = height > 0
-          ? (details.localPosition.dy / height).clamp(0.0, 1.0)
-          : 0.5;
+      _dragStartX = localPos.dx;
+      _pointerDyRatio =
+          height > 0 ? (localPos.dy / height).clamp(0.05, 0.95) : 0.5;
       _dragDirection = 0;
       _dragProgress = 0.0;
     });
   }
 
-  void _handlePanUpdate(DragUpdateDetails details, double width, double height) {
+  void _updateDragAt(Offset localPos, double width, double height) {
     if (_isAnimatingSettle || width <= 0) return;
 
-    final double totalDx = details.localPosition.dx - _dragStartX;
-    final double dxRatio =
-        (details.localPosition.dx / width).clamp(0.0, 1.0);
-    final double dyRatio = height > 0
-        ? (details.localPosition.dy / height).clamp(0.0, 1.0)
-        : 0.5;
+    final double totalDx = localPos.dx - _dragStartX;
+    final double dyRatio =
+        height > 0 ? (localPos.dy / height).clamp(0.05, 0.95) : 0.5;
 
     int activeDir = _dragDirection;
-    if (activeDir == 0 && totalDx.abs() > 3.0) {
+    if (activeDir == 0 && totalDx.abs() > 2.0) {
       final int candidateDir = totalDx < 0 ? -1 : 1;
       final int targetPage = _currentPage - candidateDir;
       if (targetPage >= 1 && targetPage <= totalPages) {
@@ -399,34 +392,31 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
 
     if (activeDir == 0) {
       setState(() {
-        _pointerDxRatio = dxRatio;
         _pointerDyRatio = dyRatio;
       });
       return;
     }
 
-    // تحكم مباشر لحظي: نسبة السحب تعتمد على المسافة المقطوعة في اتجاه التقليب
-    final double rawProgress = (-totalDx * activeDir) / (width * 0.78);
+    // تحكم مباشر لحظي: تتبع حركة الإصبع فوراً وتبقى معلّقة عند التوقف
+    final double progress = ((-totalDx * activeDir) / (width * 0.72))
+        .clamp(0.0, 1.0);
     setState(() {
       _dragDirection = activeDir;
-      _pointerDxRatio = dxRatio;
       _pointerDyRatio = dyRatio;
-      _dragProgress = rawProgress.clamp(0.0, 1.0);
+      _dragProgress = progress;
     });
   }
 
-  void _handlePanEnd(DragEndDetails details) {
+  void _endDragWithVelocity(double vx) {
     if (_isAnimatingSettle) return;
 
-    final double vx = details.velocity.pixelsPerSecond.dx;
-
     if (_dragDirection == 0) {
-      if (vx.abs() > 380) {
+      if (vx.abs() > 350) {
         final int candidateDir = vx < 0 ? -1 : 1;
         final int targetPage = _currentPage - candidateDir;
         if (targetPage >= 1 && targetPage <= totalPages) {
           _dragDirection = candidateDir;
-          _dragProgress = 0.22;
+          _dragProgress = 0.25;
           _startSettleTo(true);
         }
       }
@@ -434,9 +424,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     }
 
     final double directionalVelocity = -vx * _dragDirection;
-    // قرار الإكمال أو التراجع بيد المستخدم بناءً على موضع التوقف أو سرعة السحب
     final bool shouldCommit =
-        _dragProgress >= 0.42 || directionalVelocity > 520;
+        _dragProgress >= 0.38 || directionalVelocity > 480;
     _startSettleTo(shouldCommit);
   }
 
@@ -560,14 +549,25 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                 final double height = constraints.maxHeight;
 
                 return GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onPanStart: (d) => _handlePanStart(d, width, height),
-                  onPanUpdate: (d) => _handlePanUpdate(d, width, height),
-                  onPanEnd: _handlePanEnd,
+                  behavior: HitTestBehavior.translucent,
+                  onHorizontalDragStart: (d) =>
+                      _beginDragAt(d.localPosition, height),
+                  onHorizontalDragUpdate: (d) =>
+                      _updateDragAt(d.localPosition, width, height),
+                  onHorizontalDragEnd: (d) =>
+                      _endDragWithVelocity(d.primaryVelocity ?? 0.0),
+                  onVerticalDragUpdate: (d) {
+                    if (_dragDirection != 0 && !_isAnimatingSettle && height > 0) {
+                      setState(() {
+                        _pointerDyRatio =
+                            (d.localPosition.dy / height).clamp(0.05, 0.95);
+                      });
+                    }
+                  },
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      // 1. الصفحة الثابتة تحت الورقة المنثنية (تتكشف تدريجياً دون أن تتحرك)
+                      // الصفحة الثابتة تحت الورقة المنثنية وتتكشف تدريجياً
                       if (targetPageNumber != null)
                         _buildStaticUnderPage(
                           pageNumber: targetPageNumber,
@@ -576,7 +576,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                           progress: _dragProgress,
                         ),
 
-                      // 2. الورقة المنثنية نفسها: الجزء المتبقي منها + ظهر الورقة المعطوفة بزاوية وتقوّس وظل
+                      // الورقة المنثنية نفسها (عطف مائل + تقوّس + ظل + ظهر الورقة)
                       _buildCurledSingleSheet(
                         currentPage: _currentPage,
                         backPage: targetPageNumber ?? _currentPage,
@@ -584,7 +584,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                         height: height,
                         dragDirection: _dragDirection,
                         progress: hasActiveCurl ? _dragProgress : 0.0,
-                        pointerDxRatio: _pointerDxRatio,
                         pointerDyRatio: _pointerDyRatio,
                         nightMode: _nightMode,
                         scale: _pageScale,
@@ -633,7 +632,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     required double height,
     required int dragDirection,
     required double progress,
-    required double pointerDxRatio,
     required double pointerDyRatio,
     required bool nightMode,
     required double scale,
@@ -650,14 +648,13 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       size: Size(width, height),
       dragDirection: dragDirection,
       progress: progress,
-      pointerDxRatio: pointerDxRatio,
       pointerDyRatio: pointerDyRatio,
     );
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        // ظل عميق ناعم على الصفحة التي تحت الورقة بمحاذاة خط العطف لإبراز ارتفاع الورقة
+        // ظل ناعم على الصفحة التي تحت الورقة بمحاذاة خط العطف
         IgnorePointer(
           child: CustomPaint(
             size: Size(width, height),
@@ -669,7 +666,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
           ),
         ),
 
-        // الجزء غير المنعطف من الورقة الحالية (يحافظ على إطاره وآياته بوضوح)
+        // الجزء غير المنعطف من الورقة الحالية
         ClipPath(
           clipper: _RemainingSheetClipper(geometry: geom),
           child: MushafSingleSheet(
@@ -679,7 +676,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
           ),
         ),
 
-        // ظهر الورقة المنثنية نفسها (يعرض الصفحة التالية معكوسة أفقياً وناعمة ضمن الجزء المعطوف فقط)
+        // ظهر الورقة المنثنية (يظهر الصفحة التالية معكوسة وناعمة ضمن الجزء المعطوف فقط)
         ClipPath(
           clipper: _FoldedFlapClipper(geometry: geom),
           child: Stack(
@@ -1082,27 +1079,24 @@ class _CurlGeometry {
     required Size size,
     required int dragDirection,
     required double progress,
-    required double pointerDxRatio,
     required double pointerDyRatio,
   }) {
     final double w = size.width;
     final double h = size.height;
 
-    // ميل العطف يتبع ارتفاع الإصبع (من الأعلى للأسفل) ليعطي زاوية مائلة طبيعية كالورقة
-    final double verticalBias = (pointerDyRatio - 0.5) * 2.0; // -1 .. +1
+    final double verticalBias = (pointerDyRatio - 0.5) * 2.0;
     final double slantPx = verticalBias * w * 0.16 * progress;
-
-    // عمق التقوّس المرن لحافة الثنية
-    final double bowMagnitude = w * 0.085 * (progress * (1.0 - progress * 0.35));
+    final double bowMagnitude =
+        w * 0.085 * (progress * (1.0 - progress * 0.35));
     final double focusY = (h * pointerDyRatio).clamp(h * 0.1, h * 0.9);
 
     if (dragDirection < 0) {
-      // سحب نحو اليسار لقلب الصفحة التالية: خط العطف يتحرك من اليمين نحو اليسار
       final double baseCreaseX = w * (1.0 - progress);
       final double creaseTopX = (baseCreaseX + slantPx).clamp(0.0, w);
       final double creaseBottomX = (baseCreaseX - slantPx).clamp(0.0, w);
       final double bowOffsetX = -bowMagnitude;
-      final double flapWidth = (w * (0.14 + 0.22 * progress)).clamp(18.0, w * 0.42);
+      final double flapWidth =
+          (w * (0.14 + 0.22 * progress)).clamp(18.0, w * 0.42);
 
       return _CurlGeometry(
         size: size,
@@ -1115,12 +1109,12 @@ class _CurlGeometry {
         flapWidth: flapWidth,
       );
     } else {
-      // سحب نحو اليمين للرجوع للصفحة السابقة: خط العطف يتحرك من اليسار نحو اليمين
       final double baseCreaseX = w * progress;
       final double creaseTopX = (baseCreaseX - slantPx).clamp(0.0, w);
       final double creaseBottomX = (baseCreaseX + slantPx).clamp(0.0, w);
       final double bowOffsetX = bowMagnitude;
-      final double flapWidth = (w * (0.14 + 0.22 * progress)).clamp(18.0, w * 0.42);
+      final double flapWidth =
+          (w * (0.14 + 0.22 * progress)).clamp(18.0, w * 0.42);
 
       return _CurlGeometry(
         size: size,
@@ -1135,7 +1129,6 @@ class _CurlGeometry {
     }
   }
 
-  // مسار خط العطف المنحني بين أعلى الشاشة وأسفلها
   Path buildCreaseCurvePath() {
     final double midCreaseX = (creaseTopX + creaseBottomX) * 0.5 + bowOffsetX;
     return Path()
@@ -1143,14 +1136,14 @@ class _CurlGeometry {
       ..quadraticBezierTo(midCreaseX, focusY, creaseBottomX, size.height);
   }
 
-  // مسار الحافة الخارجية للجزء المعطوف (ظهر الورقة)
   Path buildOuterFlapCurvePath() {
     final double topOuterX =
         (creaseTopX - dragDirection * flapWidth).clamp(0.0, size.width);
     final double bottomOuterX =
         (creaseBottomX - dragDirection * flapWidth).clamp(0.0, size.width);
-    final double midOuterX = ((topOuterX + bottomOuterX) * 0.5 + bowOffsetX * 1.25)
-        .clamp(0.0, size.width);
+    final double midOuterX =
+        ((topOuterX + bottomOuterX) * 0.5 + bowOffsetX * 1.25)
+            .clamp(0.0, size.width);
 
     return Path()
       ..moveTo(topOuterX, 0)
@@ -1170,7 +1163,6 @@ class _RemainingSheetClipper extends CustomClipper<Path> {
     final Path path = Path();
 
     if (geometry.dragDirection < 0) {
-      // يظهر الجزء الأيسر من الورقة الحالية حتى خط العطف المنحني
       path.moveTo(0, 0);
       path.lineTo(geometry.creaseTopX, 0);
       path.quadraticBezierTo(
@@ -1182,7 +1174,6 @@ class _RemainingSheetClipper extends CustomClipper<Path> {
       path.lineTo(0, size.height);
       path.close();
     } else {
-      // يظهر الجزء الأيمن من الورقة الحالية حتى خط العطف المنحني
       path.moveTo(geometry.creaseTopX, 0);
       path.lineTo(size.width, 0);
       path.lineTo(size.width, size.height);
@@ -1314,14 +1305,12 @@ class _FlapShadingAndCreasePainter extends CustomPainter {
     final Path crease = geometry.buildCreaseCurvePath();
     final Path outerEdge = geometry.buildOuterFlapCurvePath();
 
-    // خط ثنية ناعم يوضح انعطاف الورقة
     final Paint creaseLinePaint = Paint()
       ..color = (nightMode ? Colors.white : Colors.black)
           .withValues(alpha: (nightMode ? 0.16 : 0.22) * progress)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.4;
 
-    // ظل خفيف على الحافة الخارجية للورقة المنثنية
     final Paint outerShadowPaint = Paint()
       ..color = Colors.black.withValues(alpha: 0.20 * progress)
       ..style = PaintingStyle.stroke
