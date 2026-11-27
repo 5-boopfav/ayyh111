@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,11 +11,11 @@ class BahmadMushafApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const MaterialApp(
       title: 'مصحف بحمد',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.system,
-      home: const Directionality(
+      home: Directionality(
         textDirection: TextDirection.rtl,
         child: MushafReaderScreen(),
       ),
@@ -247,8 +246,9 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     _settleController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 260),
-    )..addListener(_onSettleTick)
-     ..addStatusListener(_onSettleStatus);
+    )
+      ..addListener(_onSettleTick)
+      ..addStatusListener(_onSettleStatus);
 
     _loadSavedState();
   }
@@ -402,8 +402,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     }
 
     // تحويل إزاحة الإصبع إلى نسبة تقدم من 0.0 إلى 1.0
-    // عند _dragDirection == -1: dx سالب يزيد التقدم
-    // عند _dragDirection == +1: dx موجب يزيد التقدم
     final double deltaProgress = (-dx * _dragDirection) / (width * 0.85);
     setState(() {
       _pointerDyRatio = dyRatio;
@@ -415,7 +413,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     if (_isAnimatingCommit || _dragDirection == 0) return;
 
     final double velocity = details.primaryVelocity ?? 0.0;
-    // سرعة السحب في الاتجاه المقصود
     final double directionalVelocity = -velocity * _dragDirection;
 
     final bool shouldCommit =
@@ -506,7 +503,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
           ],
         ),
         actions: [
-          // علامة الحفظ
           IconButton(
             tooltip: _bookmarkedPage == _currentPage
                 ? 'إزالة علامة الحفظ'
@@ -519,14 +515,12 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
             ),
             onPressed: _toggleBookmark,
           ),
-          // الانتقال السريع إلى علامة الحفظ إن وجدت
           if (_bookmarkedPage != null)
             IconButton(
               tooltip: 'الذهاب إلى علامة الحفظ (ص $_bookmarkedPage)',
               icon: Icon(Icons.turned_in_not, color: accentColor),
               onPressed: () => _jumpToPage(_bookmarkedPage!),
             ),
-          // الوضع الليلي
           IconButton(
             tooltip: _nightMode ? 'الوضع النهاري' : 'الوضع الليلي',
             icon: Icon(
@@ -556,7 +550,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      // 1. الصفحة التالية / المستهدفة تبقى ثابتة في مكانها تحت الورقة المسحوبة
                       if (underPageNumber != null)
                         _buildFixedUnderPage(
                           pageNumber: underPageNumber,
@@ -564,9 +557,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                           scale: _pageScale,
                           progress: _dragProgress,
                         ),
-
-                      // 2. الصفحة الحالية (بإطارها القرآني المدمج الذي يتحرك معها كجزء من الورقة)
-                      // مع عطف ومنظور ثلاثي الأبعاد ناعم يتبع السحب
                       _buildActiveCurved3DPage(
                         pageNumber: _currentPage,
                         width: width,
@@ -595,8 +585,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     required double scale,
     required double progress,
   }) {
-    // ظل متدرج يظهر على الصفحة الثابتة تحت الورقة المرفوعة دون تحريك الصفحة نفسها
-    final double shadowOpacity = (0.28 * (1.0 - (progress * 0.45))).clamp(0.0, 0.35);
+    final double shadowOpacity =
+        (0.28 * (1.0 - (progress * 0.45))).clamp(0.0, 0.35);
 
     return Stack(
       fit: StackFit.expand,
@@ -633,31 +623,24 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       );
     }
 
-    // حساب زاوية الدوران ثلاثي الأبعاد والانحناء/العطف المتزن
-    // عند السحب لليسار (dragDirection == -1): الورقة تدور حول الحافة اليمنى/الوسط وتنثني للداخل
-    // عند السحب لليمين (dragDirection == +1): الورقة تدور حول الحافة اليسرى/الوسط وتنثني للداخل
-    final double maxTiltAngle = 0.72; // زاوية منظورية متزنة تحافظ على وضوح الآيات
+    const double maxTiltAngle = 0.72;
     final double angleY = dragDirection * progress * maxTiltAngle;
 
-    // ميلان خفيف يتبع موضع الإصبع عمودياً لإحساس العطف الطبيعي
-    final double verticalFactor = (pointerDyRatio - 0.5) * 2.0; // من -1 إلى +1
+    final double verticalFactor = (pointerDyRatio - 0.5) * 2.0;
     final double angleX = -verticalFactor * progress * 0.14;
 
-    // إزاحة أفقية ناعمة تتبع السحب وتكشف الصفحة الثابتة تحتها
     final double translateX = dragDirection * progress * (width * 0.68);
     final double translateY = verticalFactor * progress * (height * 0.04);
 
-    // محور الارتكاز يميل نحو الطرف المقابل لاتجاه السحب ليحاكي عطف الورقة
     final double pivotX = dragDirection < 0 ? 0.85 : 0.15;
     final double pivotY = pointerDyRatio.clamp(0.15, 0.85);
 
     final Matrix4 transform = Matrix4.identity()
-      ..setEntry(3, 2, 0.0011) // عمق المنظور ثلاثي الأبعاد (Perspective)
-      ..translateByDouble(translateX, translateY, 0.0, 1.0)
+      ..setEntry(3, 2, 0.0011)
+      ..translate(translateX, translateY, 0.0)
       ..rotateY(angleY)
       ..rotateX(angleX);
 
-    // انحناء حافة العطف للداخل عبر قصّ ناعم يتبع موضع الإصبع ونسبة السحب
     return Transform(
       alignment: Alignment(pivotX * 2 - 1, pivotY * 2 - 1),
       transform: transform,
@@ -675,7 +658,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
               nightMode: nightMode,
               scale: scale,
             ),
-            // تدرج إضاءة وظل خفيف على سطح الورقة المعطوفة لزيادة الإحساس بالعمق
             IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -687,7 +669,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                         ? Alignment.centerLeft
                         : Alignment.centerRight,
                     colors: [
-                      Colors.white.withValues(alpha: nightMode ? 0.04 : 0.16 * progress),
+                      Colors.white.withValues(
+                          alpha: nightMode ? 0.04 : 0.16 * progress),
                       Colors.transparent,
                       Colors.black.withValues(alpha: 0.24 * progress),
                     ],
@@ -724,7 +707,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // مؤشر الورد اليومي
             Row(
               children: [
                 Text(
@@ -749,7 +731,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
               ],
             ),
             const SizedBox(height: 6),
-            // أزرار الفهرس والأجزاء والورد وحجم العرض
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -784,10 +765,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       ),
     );
   }
-
-  // ==========================================================================
-  // نوافذ الفهرس والأجزاء والورد وحجم العرض
-  // ==========================================================================
 
   void _openSurahIndexSheet() {
     showModalBottomSheet(
@@ -1081,7 +1058,6 @@ class MushafSheetWithFrame extends StatelessWidget {
               assetPath,
               fit: BoxFit.contain,
               errorBuilder: (context, error, stackTrace) {
-                // عرض احتياطي واضح في حال عدم إضافة صور الأصول بعد أثناء الاختبار
                 return Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -1158,7 +1134,6 @@ class _QuranicPageFramePainter extends CustomPainter {
     canvas.drawRect(outerRect, outerPaint);
     canvas.drawRect(innerRect, innerPaint);
 
-    // زخارف أركان بسيطة بأسلوب المصحف دون إثقال بصري
     const double cornerLen = 18.0;
     final Paint cornerPaint = Paint()
       ..color = outerColor
@@ -1180,7 +1155,6 @@ class _QuranicPageFramePainter extends CustomPainter {
       canvas.drawLine(c, Offset(c.dx, c.dy + dy * cornerLen), cornerPaint);
     }
 
-    // معين زخرفي صغير في منتصف الحواف الأربع
     final double midX = size.width / 2;
     final double midY = size.height / 2;
     const double diamondR = 5.0;
@@ -1232,10 +1206,10 @@ class _PageCurlClipper extends CustomClipper<Path> {
     }
 
     final double curlDepth = size.width * 0.14 * progress;
-    final double focusY = (size.height * pointerDyRatio).clamp(0.0, size.height);
+    final double focusY =
+        (size.height * pointerDyRatio).clamp(0.0, size.height);
 
     if (dragDirection < 0) {
-      // سحب نحو اليسار: انحناء الحافة اليمنى للداخل بشكل مقوس ناعم
       final double rightEdgeX = size.width - curlDepth;
       path.moveTo(0, 0);
       path.lineTo(size.width, 0);
@@ -1248,7 +1222,6 @@ class _PageCurlClipper extends CustomClipper<Path> {
       path.lineTo(0, size.height);
       path.close();
     } else {
-      // سحب نحو اليمين: انحناء الحافة اليسرى للداخل بشكل مقوس ناعم
       final double leftEdgeX = curlDepth;
       path.moveTo(0, 0);
       path.lineTo(size.width, 0);
