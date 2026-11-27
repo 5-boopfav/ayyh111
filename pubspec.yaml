@@ -1,23 +1,27 @@
-name: youmak_binour_allah
-description: "تطبيق يومك بنور الله"
+name: mushaf_app
+description: "تطبيق المصحف الشريف بصفحات PNG كاملة مع تقليب الصفحات والوضع الليلي."
 publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.5.0 <4.0.0'
+  sdk: '>=3.2.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  adhan: ^2.0.0+1
+  shared_preferences: ^2.3.3
+  firebase_core: ^3.6.0
+  cloud_firestore: ^5.4.4
+  audioplayers: ^6.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^4.0.0
 
 flutter:
   uses-material-design: true
+
   assets:
-    - assets/data/
+    - assets/images/quran/
