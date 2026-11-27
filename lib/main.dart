@@ -66,11 +66,16 @@ class PageThemePreset {
 }
 
 const List<PageThemePreset> kPageThemePresets = [
-  PageThemePreset(id: 'classic_cream', name: 'ورقي كلاسيكي', hue: 38.0, shade: 0.14),
-  PageThemePreset(id: 'warm_ivory', name: 'عاجي دافئ', hue: 30.0, shade: 0.24),
-  PageThemePreset(id: 'sage_calm', name: 'زيتوني هادئ', hue: 92.0, shade: 0.22),
-  PageThemePreset(id: 'sky_mist', name: 'سماوي لطيف', hue: 202.0, shade: 0.20),
-  PageThemePreset(id: 'sand_stone', name: 'رملي مريح', hue: 46.0, shade: 0.36),
+  PageThemePreset(
+      id: 'classic_cream', name: 'ورقي كلاسيكي', hue: 38.0, shade: 0.14),
+  PageThemePreset(
+      id: 'warm_ivory', name: 'عاجي دافئ', hue: 30.0, shade: 0.24),
+  PageThemePreset(
+      id: 'sage_calm', name: 'زيتوني هادئ', hue: 92.0, shade: 0.22),
+  PageThemePreset(
+      id: 'sky_mist', name: 'سماوي لطيف', hue: 202.0, shade: 0.20),
+  PageThemePreset(
+      id: 'sand_stone', name: 'رملي مريح', hue: 46.0, shade: 0.36),
 ];
 
 const List<SurahInfo> kSurahs = [
@@ -249,15 +254,16 @@ class PageThemePalette {
     final double h = hue % 360.0;
     final double s = shade.clamp(0.0, 1.0);
 
-    // تدريجة من ورق فاتح ناعم (s = 0) إلى تدريجة أغمق وأعمق (s = 1)
     final double paperLightness = ui.lerpDouble(0.975, 0.80, s)!;
     final double paperSat = ui.lerpDouble(0.28, 0.48, s)!;
 
     final double bgLightness = ui.lerpDouble(0.945, 0.74, s)!;
     final double bgSat = ui.lerpDouble(0.24, 0.42, s)!;
 
-    final Color paper = HSLColor.fromAHSL(1.0, h, paperSat, paperLightness).toColor();
-    final Color background = HSLColor.fromAHSL(1.0, h, bgSat, bgLightness).toColor();
+    final Color paper =
+        HSLColor.fromAHSL(1.0, h, paperSat, paperLightness).toColor();
+    final Color background =
+        HSLColor.fromAHSL(1.0, h, bgSat, bgLightness).toColor();
 
     final double inkLightness = ui.lerpDouble(0.16, 0.11, s)!;
     final Color ink = HSLColor.fromAHSL(1.0, h, 0.22, inkLightness).toColor();
@@ -265,9 +271,9 @@ class PageThemePalette {
     final Color accent = HSLColor.fromAHSL(1.0, h, 0.52, 0.34).toColor();
     final Color outerFrame = HSLColor.fromAHSL(1.0, h, 0.46, 0.36).toColor();
     final Color innerFrame = HSLColor.fromAHSL(1.0, h, 0.38, 0.52).toColor();
-    final Color backFaceTint =
-        HSLColor.fromAHSL(1.0, h, 0.35, (paperLightness - 0.06).clamp(0.55, 0.92))
-            .toColor();
+    final Color backFaceTint = HSLColor.fromAHSL(
+            1.0, h, 0.35, (paperLightness - 0.06).clamp(0.55, 0.92))
+        .toColor();
 
     return PageThemePalette(
       background: background,
@@ -292,21 +298,26 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     with SingleTickerProviderStateMixin {
   static const int totalPages = 604;
 
+  // لون الحبل الأحمر أخف وأهدأ (لقطة أ)
+  static const Color _softBookmarkRed = Color(0xFFC94A4A);
+  static const Color _softBookmarkRedLight = Color(0xFFD96B6B);
+  static const Color _softBookmarkRedDark = Color(0xFF9E3434);
+
   int _currentPage = 1;
   int? _bookmarkedPage;
-  double _ribbonDropRatio = 0.34; // طول نزول الحبل الأحمر على الصفحة
+  double _ribbonDropRatio = 0.34;
   int _dailyWirdGoalPages = 20;
   int _wirdReadToday = 0;
   String _lastWirdDate = '';
   double _pageScale = 1.0;
 
-  // إعدادات الثيم (اللون والتدريجة) والشريط السفلي المخفي افتراضياً
+  // إعدادات الثيم (اللون والتدريجة) والشريط السفلي المخفي افتراضياً (لقطة أ)
   String _selectedThemeId = 'classic_cream';
   double _themeHue = 38.0;
   double _themeShade = 0.14;
   bool _showBottomBar = false;
 
-  // تتبع اللمس المباشر من الحافتين ومنع تعدد عمليات التقليب في وقت واحد
+  // تتبع اللمس المباشر من الحافتين (السحب فقط للتقليب، والنقر الخفيف لإظهار الشريط السفلي)
   int? _activePointerId;
   double _startX = 0.0;
   double _startY = 0.0;
@@ -315,6 +326,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   double _vx = 0.0;
   double _dyRatio = 0.5;
   double _touchXRatio = 0.5;
+  double _verticalTravelRatio = 0.0;
+  bool _hasMovedBeyondTap = false;
 
   // -1 للانتقال للصفحة التالية (مسك من اليسار وسحب يميناً)
   // +1 للرجوع للصفحة السابقة (مسك من اليمين وسحب يساراً)
@@ -326,7 +339,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   late final AnimationController _settleCtrl;
   Animation<double>? _settleAnim;
 
-  // ذاكرة تخزين مؤقت لصور الصفحات لتفادي إعادة التحميل أثناء السحب
   final Map<int, ImageProvider> _imageCache = {};
   int _lastPrecachedPage = -1;
 
@@ -360,6 +372,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
             _activePointerId = null;
             _dragDir = 0;
             _progress = 0.0;
+            _verticalTravelRatio = 0.0;
+            _hasMovedBeyondTap = false;
             _settling = false;
             _commit = false;
           });
@@ -470,6 +484,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       _activePointerId = null;
       _dragDir = 0;
       _progress = 0.0;
+      _verticalTravelRatio = 0.0;
+      _hasMovedBeyondTap = false;
       _settling = false;
       _commit = false;
       _currentPage = page.clamp(1, totalPages);
@@ -486,7 +502,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   }
 
   void _handlePointerDown(PointerDownEvent event, double width, double height) {
-    // منع تنفيذ أكثر من عملية تقليب في الوقت نفسه
     if (_settling || _activePointerId != null || width <= 0) return;
 
     final double x = event.localPosition.dx;
@@ -495,10 +510,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
 
     int initialDir = 0;
     if (x <= edgeZone && _currentPage < totalPages) {
-      // مسك من الحافة اليسرى للانتقال للصفحة التالية (سحب نحو اليمين)
       initialDir = -1;
     } else if (x >= (width - edgeZone) && _currentPage > 1) {
-      // مسك من الحافة اليمنى للرجوع للصفحة السابقة (سحب نحو اليسار)
       initialDir = 1;
     }
 
@@ -511,6 +524,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       _vx = 0.0;
       _dyRatio = height > 0 ? (y / height).clamp(0.06, 0.94) : 0.5;
       _touchXRatio = (x / width).clamp(0.0, 1.0);
+      _verticalTravelRatio = 0.0;
+      _hasMovedBeyondTap = false;
       _dragDir = initialDir;
       _progress = 0.0;
     });
@@ -530,8 +545,18 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
 
     final double x = event.localPosition.dx;
     final double y = event.localPosition.dy;
-    final double verticalDeltaRatio =
-        height > 0 ? ((y - _startY) / height) : 0.0;
+    final double dx = x - _startX;
+    final double dy = y - _startY;
+
+    if (dx.abs() > 10.0 || dy.abs() > 10.0) {
+      _hasMovedBeyondTap = true;
+      // العودة للسحب/اللمس المتنقل تُخفي الشريط السفلي تلقائياً (لقطة أ)
+      if (_showBottomBar) {
+        _showBottomBar = false;
+      }
+    }
+
+    final double verticalDeltaRatio = height > 0 ? (dy / height) : 0.0;
     final double baseRatioY = height > 0 ? (y / height) : 0.5;
     final double ratioY =
         (baseRatioY + verticalDeltaRatio * 0.35).clamp(0.06, 0.94);
@@ -541,17 +566,19 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       setState(() {
         _dyRatio = ratioY;
         _touchXRatio = ratioX;
+        _verticalTravelRatio = verticalDeltaRatio.clamp(-0.6, 0.6);
       });
       return;
     }
 
-    final double dx = x - _startX;
+    // التقليب بالسحب فقط في الاتجاه الصحيح من الحافة الممسوكة
     final double signedTravel = _dragDir < 0 ? dx : -dx;
     final double raw = (signedTravel / (width * 0.44)).clamp(0.0, 1.0);
 
     setState(() {
       _dyRatio = ratioY;
       _touchXRatio = ratioX;
+      _verticalTravelRatio = verticalDeltaRatio.clamp(-0.6, 0.6);
       _progress = raw;
     });
   }
@@ -560,10 +587,26 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     if (_activePointerId == null || pointer != _activePointerId) return;
     if (_settling) return;
 
-    if (_dragDir == 0) {
+    // إذا كان نقراً خفيفاً دون سحب، نبدّل ظهور الشريط السفلي (لقطة أ)
+    if (!_hasMovedBeyondTap && _progress <= 0.001) {
       setState(() {
         _activePointerId = null;
+        _dragDir = 0;
         _progress = 0.0;
+        _verticalTravelRatio = 0.0;
+        _showBottomBar = !_showBottomBar;
+      });
+      _saveState();
+      return;
+    }
+
+    if (_dragDir == 0 || _progress <= 0.001) {
+      setState(() {
+        _activePointerId = null;
+        _dragDir = 0;
+        _progress = 0.0;
+        _verticalTravelRatio = 0.0;
+        _hasMovedBeyondTap = false;
       });
       return;
     }
@@ -651,7 +694,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
           ],
         ),
         actions: [
-          // زر الحبل الأحمر (علامة الحفظ)
           IconButton(
             tooltip: hasBookmarkOnCurrent
                 ? 'إزالة الحبل الأحمر من هذه الصفحة'
@@ -659,7 +701,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
             icon: Icon(
               Icons.bookmark,
               color: hasBookmarkOnCurrent
-                  ? const Color(0xFFD62828)
+                  ? _softBookmarkRed
                   : palette.ink.withValues(alpha: 0.75),
             ),
             onPressed: _toggleBookmark,
@@ -669,30 +711,10 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
               tooltip: 'الذهاب إلى علامة الحفظ (ص $_bookmarkedPage)',
               icon: const Icon(
                 Icons.turned_in,
-                color: Color(0xFFD62828),
+                color: _softBookmarkRed,
               ),
               onPressed: () => _jumpToPage(_bookmarkedPage!),
             ),
-          // زر الثيمات (اللون والتدريجة)
-          IconButton(
-            tooltip: 'ثيم الصفحة (اللون والتدريجة)',
-            icon: Icon(Icons.palette_outlined, color: palette.ink),
-            onPressed: () => _openThemeCustomizer(palette),
-          ),
-          // زر إظهار/إخفاء الشريط السفلي المخفي افتراضياً
-          IconButton(
-            tooltip: _showBottomBar
-                ? 'إخفاء شريط الأدوات'
-                : 'إظهار شريط الأدوات (الفهرس، الأجزاء، الورد، الحجم)',
-            icon: Icon(
-              _showBottomBar ? Icons.keyboard_arrow_down : Icons.tune,
-              color: palette.ink,
-            ),
-            onPressed: () {
-              setState(() => _showBottomBar = !_showBottomBar);
-              _saveState();
-            },
-          ),
         ],
       ),
       body: Column(
@@ -712,7 +734,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      // الصفحة التالية أسفل الورقة المنثنية مع ظل ناعم يرتفع تدريجياً
                       if (isTurning)
                         _NextPageUnderlay(
                           imageProvider: _providerForPage(underPage),
@@ -721,8 +742,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                           scale: _pageScale,
                           progress: _progress,
                         ),
-
-                      // محرك التقليب القطري المنحني للورقة مع الإضاءة والظلال والوجه الخلفي
                       _RealisticPaperCurlEngine(
                         currentProvider: _providerForPage(_currentPage),
                         backProvider: _providerForPage(underPage),
@@ -734,11 +753,10 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                         progress: isTurning ? _progress : 0.0,
                         dyRatio: _dyRatio,
                         touchXRatio: _touchXRatio,
+                        verticalTravelRatio: _verticalTravelRatio,
                         palette: palette,
                         scale: _pageScale,
                       ),
-
-                      // علامة الحفظ على شكل حبل أحمر ينزل على الصفحة المحفوظة
                       if (hasBookmarkOnCurrent)
                         _RedBookmarkCordOverlay(
                           pageHeight: height,
@@ -755,7 +773,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
               },
             ),
           ),
-          // الشريط السفلي مخفي افتراضياً ويظهر عند التفعيل
+          // الشريط السفلي مخفي افتراضياً ويظهر بنقرة خفيفة ويختفي بالعودة للسحب/اللمس (لقطة أ)
           if (_showBottomBar)
             _BottomBar(
               palette: palette,
@@ -765,6 +783,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
               onOpenJuz: () => _openJuz(palette),
               onOpenWird: _openWird,
               onOpenScale: () => _openScale(palette),
+              onOpenTheme: () => _openThemeCustomizer(palette),
             ),
         ],
       ),
@@ -814,7 +833,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                           decoration: BoxDecoration(
                             color: livePalette.background,
                             shape: BoxShape.circle,
-                            border: Border.all(color: livePalette.accent, width: 1.5),
+                            border:
+                                Border.all(color: livePalette.accent, width: 1.5),
                           ),
                         ),
                       ],
@@ -1147,7 +1167,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   }
 }
 
-/// علامة الحفظ على شكل حبل أحمر ينزل من أعلى الصفحة مع إمكانية سحب طوله أو إزالته
 class _RedBookmarkCordOverlay extends StatelessWidget {
   final double pageHeight;
   final double dropRatio;
@@ -1196,37 +1215,34 @@ class _RedCordPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const double cordWidth = 7.0;
+    const double cordWidth = 6.5;
     final double centerX = size.width * 0.5;
     final double leftX = centerX - cordWidth * 0.5;
     final double rightX = centerX + cordWidth * 0.5;
 
-    // ظل ناعم للحبل الأحمر على الورقة
     final Path shadowPath = Path()
       ..moveTo(leftX + 1.5, 0)
       ..lineTo(rightX + 1.5, 0)
       ..lineTo(rightX + 1.5, cordLength)
-      ..lineTo(centerX + 1.5, cordLength + 12)
+      ..lineTo(centerX + 1.5, cordLength + 11)
       ..lineTo(leftX + 1.5, cordLength)
       ..close();
 
     canvas.drawPath(
       shadowPath,
       Paint()
-        ..color = Colors.black.withValues(alpha: 0.24)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0),
+        ..color = Colors.black.withValues(alpha: 0.18)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.8),
     );
 
-    // جسم الحبل الأحمر بتدرج لوني يعطي إحساساً بخيط/حبل قماشي نازل
-    final Rect cordRect = Rect.fromLTRB(leftX, 0, rightX, cordLength + 12);
     final Paint cordPaint = Paint()
       ..shader = ui.Gradient.linear(
         Offset(leftX, 0),
         Offset(rightX, 0),
         const [
-          Color(0xFF9E1B1B),
-          Color(0xFFE63946),
-          Color(0xFFB81D24),
+          _MushafReaderScreenState._softBookmarkRedDark,
+          _MushafReaderScreenState._softBookmarkRedLight,
+          _MushafReaderScreenState._softBookmarkRed,
         ],
         const [0.0, 0.45, 1.0],
       );
@@ -1235,22 +1251,17 @@ class _RedCordPainter extends CustomPainter {
       ..moveTo(leftX, 0)
       ..lineTo(rightX, 0)
       ..lineTo(rightX, cordLength)
-      ..lineTo(centerX, cordLength + 12)
+      ..lineTo(centerX, cordLength + 11)
       ..lineTo(leftX, cordLength)
       ..close();
 
     canvas.drawPath(cordPath, cordPaint);
 
-    // عقدة/تفصيل صغير أسفل الحبل
     canvas.drawCircle(
-      Offset(centerX, cordLength + 13),
-      3.0,
-      Paint()
-        ..color = const Color(0xFF8C1414)
-        ..shader = null,
+      Offset(centerX, cordLength + 12),
+      2.6,
+      Paint()..color = _MushafReaderScreenState._softBookmarkRedDark,
     );
-    // ضمان بقاء التدرج نظيفاً وعدم تداخل مستطيل
-    if (cordRect.isEmpty) return;
   }
 
   @override
@@ -1275,7 +1286,7 @@ class _NextPageUnderlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double dim = (0.14 * (1.0 - progress)).clamp(0.0, 0.16);
+    final double dim = (0.12 * (1.0 - progress)).clamp(0.0, 0.14);
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -1308,6 +1319,7 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
   final double progress;
   final double dyRatio;
   final double touchXRatio;
+  final double verticalTravelRatio;
   final PageThemePalette palette;
   final double scale;
 
@@ -1322,6 +1334,7 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
     required this.progress,
     required this.dyRatio,
     required this.touchXRatio,
+    required this.verticalTravelRatio,
     required this.palette,
     required this.scale,
   });
@@ -1345,11 +1358,13 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
       progress: progress,
       dyRatio: dyRatio,
       touchXRatio: touchXRatio,
+      verticalTravelRatio: verticalTravelRatio,
     );
 
-    final double liftAngleY =
-        -direction * (0.28 * math.sin(progress * math.pi * 0.65));
-    final double tiltAngleX = (dyRatio - 0.5) * 0.14 * progress;
+    final double midArch = math.sin(progress * math.pi);
+    final double liftAngleY = -direction * (0.24 * midArch);
+    final double tiltAngleX =
+        ((dyRatio - 0.5) * 0.12 + verticalTravelRatio * 0.14) * midArch;
     final Matrix4 backPerspective = Matrix4.identity()
       ..setEntry(3, 2, 0.0012)
       ..rotateY(liftAngleY)
@@ -1399,7 +1414,7 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
                   alignment: Alignment.center,
                   transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
                   child: Opacity(
-                    opacity: 0.46,
+                    opacity: 0.45,
                     child: RepaintBoundary(
                       child: MushafSingleSheet(
                         imageProvider: backProvider,
@@ -1434,6 +1449,7 @@ class _CurlMeshModel {
   final double progress;
   final double dyRatio;
   final double touchXRatio;
+  final double verticalTravelRatio;
 
   final Offset creaseTop;
   final Offset creaseMid;
@@ -1452,6 +1468,7 @@ class _CurlMeshModel {
     required this.progress,
     required this.dyRatio,
     required this.touchXRatio,
+    required this.verticalTravelRatio,
     required this.creaseTop,
     required this.creaseMid,
     required this.creaseBottom,
@@ -1468,23 +1485,31 @@ class _CurlMeshModel {
     required double progress,
     required double dyRatio,
     required double touchXRatio,
+    required double verticalTravelRatio,
   }) {
     final double w = size.width;
     final double h = size.height;
     final double p = progress.clamp(0.0, 1.0);
 
+    // 1. الانحناء والتقوّس: يبدأ مبكراً ويلين عند الاكتمال عبر sin(p * pi)^0.75
+    final double bell = math.sin(p * math.pi).clamp(0.0, 1.0);
+    final double earlyBowFactor = math.pow(bell, 0.75).toDouble();
+    final double bow = w * 0.115 * earlyBowFactor;
+
+    // عمق طي متوازن يمنع تسطح القناع في منتصف الحركة
+    final double flapDepth =
+        (w * (0.12 + 0.24 * math.sin(p * math.pi * 0.78))).clamp(16.0, w * 0.38);
+
+    // 2. ميل الطي: يجمع موضع الإصبع الرأسي واتجاه حركته صعوداً/هبوطاً
     final double verticalBias = (dyRatio - 0.5) * 2.0;
+    final double motionTilt = (verticalTravelRatio * 1.6).clamp(-0.65, 0.65);
     final double horizontalBias = (touchXRatio - 0.5).abs();
     final double diagonalSkew =
-        verticalBias * w * (0.24 + 0.08 * horizontalBias) * p;
+        (verticalBias * 0.65 + motionTilt) * w * (0.22 + 0.06 * horizontalBias) * p;
 
-    final double archFactor = math.sin(p * math.pi * 0.82);
-    final double bow = w * 0.11 * archFactor;
-
-    final double flapDepth =
-        (w * (0.14 + 0.34 * math.pow(p, 0.85))).clamp(18.0, w * 0.52);
-
-    final double fy = (h * dyRatio).clamp(h * 0.08, h * 0.92);
+    // نقطة التركيز متصلة بمنتصف الصفحة حتى لا ينكسر خط الطي بحدة عند الحواف
+    final double blendedRatioY = ui.lerpDouble(0.5, dyRatio, 0.68)!;
+    final double fy = (h * blendedRatioY).clamp(h * 0.16, h * 0.84);
 
     if (direction < 0) {
       final double baseX = w * (0.04 + 0.88 * p);
@@ -1492,10 +1517,10 @@ class _CurlMeshModel {
       final double botX = (baseX + diagonalSkew).clamp(0.0, w);
       final double midX = ((topX + botX) * 0.5 + bow).clamp(0.0, w);
 
-      final double eTopX = (topX - flapDepth).clamp(-w * 0.12, w);
-      final double eBotX = (botX - flapDepth).clamp(-w * 0.12, w);
+      final double eTopX = (topX - flapDepth).clamp(-w * 0.10, w);
+      final double eBotX = (botX - flapDepth).clamp(-w * 0.10, w);
       final double eMidX =
-          ((eTopX + eBotX) * 0.5 + bow * 1.35).clamp(-w * 0.12, w);
+          ((eTopX + eBotX) * 0.5 + bow * 1.28).clamp(-w * 0.10, w);
 
       return _CurlMeshModel(
         size: size,
@@ -1503,6 +1528,7 @@ class _CurlMeshModel {
         progress: p,
         dyRatio: dyRatio,
         touchXRatio: touchXRatio,
+        verticalTravelRatio: verticalTravelRatio,
         creaseTop: Offset(topX, 0),
         creaseMid: Offset(midX, fy),
         creaseBottom: Offset(botX, h),
@@ -1518,10 +1544,10 @@ class _CurlMeshModel {
       final double botX = (baseX - diagonalSkew).clamp(0.0, w);
       final double midX = ((topX + botX) * 0.5 - bow).clamp(0.0, w);
 
-      final double eTopX = (topX + flapDepth).clamp(0.0, w * 1.12);
-      final double eBotX = (botX + flapDepth).clamp(0.0, w * 1.12);
+      final double eTopX = (topX + flapDepth).clamp(0.0, w * 1.10);
+      final double eBotX = (botX + flapDepth).clamp(0.0, w * 1.10);
       final double eMidX =
-          ((eTopX + eBotX) * 0.5 - bow * 1.35).clamp(0.0, w * 1.12);
+          ((eTopX + eBotX) * 0.5 - bow * 1.28).clamp(0.0, w * 1.10);
 
       return _CurlMeshModel(
         size: size,
@@ -1529,6 +1555,7 @@ class _CurlMeshModel {
         progress: p,
         dyRatio: dyRatio,
         touchXRatio: touchXRatio,
+        verticalTravelRatio: verticalTravelRatio,
         creaseTop: Offset(topX, 0),
         creaseMid: Offset(midX, fy),
         creaseBottom: Offset(botX, h),
@@ -1593,12 +1620,19 @@ class _CurlMeshModel {
         other.direction == direction &&
         other.progress == progress &&
         other.dyRatio == dyRatio &&
-        other.touchXRatio == touchXRatio;
+        other.touchXRatio == touchXRatio &&
+        other.verticalTravelRatio == verticalTravelRatio;
   }
 
   @override
-  int get hashCode =>
-      Object.hash(size, direction, progress, dyRatio, touchXRatio);
+  int get hashCode => Object.hash(
+        size,
+        direction,
+        progress,
+        dyRatio,
+        touchXRatio,
+        verticalTravelRatio,
+      );
 }
 
 class _FrontBodyClipper extends CustomClipper<Path> {
@@ -1622,9 +1656,10 @@ class _CurledBackClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(covariant _CurledBackClipper oldClipper) =>
-      oldClipper.model != model;
+      oldDelegate.model != model;
 }
 
+// 3. الظلال: ظل مزدوج على الصفحة السفلى (قريب حاد نسبياً + أوسع وأخف حسب ارتفاع الورقة)
 class _UnderPageCastShadowPainter extends CustomPainter {
   final _CurlMeshModel model;
 
@@ -1634,26 +1669,38 @@ class _UnderPageCastShadowPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (model.progress <= 0.0) return;
 
-    final double lift = math.sin(model.progress * math.pi * 0.75);
-    final double shadowWidth = (18.0 + 22.0 * lift).clamp(8.0, 40.0);
-    final double alpha = (0.30 * lift).clamp(0.0, 0.36);
+    final double lift = math.sin(model.progress * math.pi).clamp(0.0, 1.0);
+    final double broadWidth = (16.0 + 26.0 * lift).clamp(8.0, 42.0);
+    final double broadAlpha = (0.26 * lift).clamp(0.0, 0.30);
 
+    // ظل أوسع وأخف يعبر عن ارتفاع الجزء المرفوع في منتصف التقليب
     canvas.drawPath(
       model.creaseCurve(),
       Paint()
-        ..color = Colors.black.withValues(alpha: alpha)
+        ..color = Colors.black.withValues(alpha: broadAlpha)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = shadowWidth
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, shadowWidth * 0.65),
+        ..strokeWidth = broadWidth
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, broadWidth * 0.72),
     );
 
+    // ظل قريب أضيق عند خط الثنية نفسه
+    canvas.drawPath(
+      model.creaseCurve(),
+      Paint()
+        ..color = Colors.black.withValues(alpha: (0.22 * lift).clamp(0.0, 0.25))
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 7.0
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0),
+    );
+
+    // ظل ناعم تحت الحافة الخارجية الملتفة
     canvas.drawPath(
       model.outerEdgeCurve(),
       Paint()
-        ..color = Colors.black.withValues(alpha: alpha * 0.55)
+        ..color = Colors.black.withValues(alpha: (0.16 * lift).clamp(0.0, 0.18))
         ..style = PaintingStyle.stroke
-        ..strokeWidth = shadowWidth * 0.6
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, shadowWidth * 0.5),
+        ..strokeWidth = broadWidth * 0.55
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, broadWidth * 0.45),
     );
   }
 
@@ -1662,6 +1709,7 @@ class _UnderPageCastShadowPainter extends CustomPainter {
       oldDelegate.model != model;
 }
 
+// 4. الإضاءة: شريط ضوئي يتبع التقوّس وتبلغ ذروته في منتصف التقليب ثم يتلاشى
 class _FrontSurfaceLightingPainter extends CustomPainter {
   final _CurlMeshModel model;
 
@@ -1671,7 +1719,8 @@ class _FrontSurfaceLightingPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (model.progress <= 0.0) return;
 
-    final double band = (28.0 + 24.0 * model.progress).clamp(16.0, 52.0);
+    final double archPeak = math.sin(model.progress * math.pi).clamp(0.0, 1.0);
+    final double band = (24.0 + 28.0 * archPeak).clamp(14.0, 52.0);
     final double midX = model.creaseMid.dx;
     final double startX = (midX - band * model.direction).clamp(0.0, size.width);
     final double endX = (midX + band * model.direction).clamp(0.0, size.width);
@@ -1687,11 +1736,11 @@ class _FrontSurfaceLightingPainter extends CustomPainter {
       ..shader = ui.Gradient.linear(
         Offset(midX, model.creaseMid.dy),
         Offset(
-          (midX - model.direction * band * 0.8).clamp(0.0, size.width),
+          (midX - model.direction * band * 0.85).clamp(0.0, size.width),
           model.creaseMid.dy,
         ),
         [
-          const Color(0xFFFFFDF8).withValues(alpha: 0.24 * model.progress),
+          const Color(0xFFFFFDF8).withValues(alpha: 0.28 * archPeak),
           Colors.transparent,
         ],
       );
@@ -1701,10 +1750,10 @@ class _FrontSurfaceLightingPainter extends CustomPainter {
     canvas.drawPath(
       model.creaseCurve(),
       Paint()
-        ..color = const Color(0xFF4A3519).withValues(alpha: 0.22 * model.progress)
+        ..color = const Color(0xFF4A3519).withValues(alpha: 0.22 * archPeak)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.6
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
+        ..strokeWidth = 1.5
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.4),
     );
   }
 
@@ -1730,6 +1779,8 @@ class _BackFaceShadingPainter extends CustomPainter {
     final Rect bounds = flapPath.getBounds();
     if (bounds.width <= 0 || bounds.height <= 0) return;
 
+    final double archPeak = math.sin(model.progress * math.pi).clamp(0.0, 1.0);
+
     canvas.drawPath(
       flapPath,
       Paint()
@@ -1737,14 +1788,15 @@ class _BackFaceShadingPainter extends CustomPainter {
         ..style = PaintingStyle.fill,
     );
 
+    // تدرج أسطواني داخل الجزء المنثني: أغمق قرب الثنية، مضيء في منتصف الانحناء، ومظلل قرب الحافة
     final Paint gradientPaint = Paint()
       ..shader = ui.Gradient.linear(
         model.creaseMid,
         model.edgeMid,
         [
-          Colors.black.withValues(alpha: 0.24 * model.progress),
-          const Color(0xFFFFFCF5).withValues(alpha: 0.18 * model.progress),
-          Colors.black.withValues(alpha: 0.20 * model.progress),
+          Colors.black.withValues(alpha: 0.26 * archPeak),
+          const Color(0xFFFFFCF5).withValues(alpha: 0.20 * archPeak),
+          Colors.black.withValues(alpha: 0.22 * archPeak),
         ],
         const [0.0, 0.45, 1.0],
       );
@@ -1754,10 +1806,10 @@ class _BackFaceShadingPainter extends CustomPainter {
     canvas.drawPath(
       model.outerEdgeCurve(),
       Paint()
-        ..color = Colors.black.withValues(alpha: 0.24 * model.progress)
+        ..color = Colors.black.withValues(alpha: 0.22 * archPeak)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 7.0
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.5),
+        ..strokeWidth = 6.5
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0),
     );
   }
 
@@ -1926,6 +1978,7 @@ class _BottomBar extends StatelessWidget {
   final VoidCallback onOpenJuz;
   final VoidCallback onOpenWird;
   final VoidCallback onOpenScale;
+  final VoidCallback onOpenTheme;
 
   const _BottomBar({
     required this.palette,
@@ -1935,6 +1988,7 @@ class _BottomBar extends StatelessWidget {
     required this.onOpenJuz,
     required this.onOpenWird,
     required this.onOpenScale,
+    required this.onOpenTheme,
   });
 
   @override
@@ -1999,6 +2053,11 @@ class _BottomBar extends StatelessWidget {
                     label: 'الحجم',
                     color: palette.ink,
                     onTap: onOpenScale),
+                _BarBtn(
+                    icon: Icons.palette_outlined,
+                    label: 'الثيم',
+                    color: palette.ink,
+                    onTap: onOpenTheme),
               ],
             ),
           ],
