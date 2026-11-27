@@ -1,38 +1,35 @@
 import 'package:flutter/material.dart';
-import 'screens/azkar_screen.dart';
-import 'screens/home_screen.dart';
+import 'screens/prayer_times_screen.dart';
 import 'screens/quran_screen.dart';
-import 'screens/settings_screen.dart';
+import 'screens/azkar_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const YoumkBinourAllahApp());
+  runApp(const YoumakBinourAllahApp());
 }
 
-class YoumkBinourAllahApp extends StatelessWidget {
-  const YoumkBinourAllahApp({super.key});
+class YoumakBinourAllahApp extends StatelessWidget {
+  const YoumakBinourAllahApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    const primarySky = Color(0xFF4F8CC9);
-    const surfaceTint = Color(0xFFF3F6F9);
+    const seedColor = Color(0xFF0E6B5D);
 
     return MaterialApp(
-      title: 'يومك بنور الله',
       debugShowCheckedModeBanner: false,
+      title: 'يومك بنور الله',
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: primarySky,
-          primary: primarySky,
-          surface: surfaceTint,
+          seedColor: seedColor,
+          brightness: Brightness.light,
         ),
-        scaffoldBackgroundColor: surfaceTint,
+        scaffoldBackgroundColor: const Color(0xFFF6F7F8),
         appBarTheme: const AppBarTheme(
-          backgroundColor: primarySky,
-          foregroundColor: Colors.white,
           centerTitle: true,
-          elevation: 0,
+          backgroundColor: Colors.white,
+          foregroundColor: Color(0xFF1A1D1F),
+          elevation: 0.5,
         ),
       ),
       builder: (context, child) {
@@ -41,26 +38,25 @@ class YoumkBinourAllahApp extends StatelessWidget {
           child: child ?? const SizedBox.shrink(),
         );
       },
-      home: const MainShellScreen(),
+      home: const MainNavigationShell(),
     );
   }
 }
 
-class MainShellScreen extends StatefulWidget {
-  const MainShellScreen({super.key});
+class MainNavigationShell extends StatefulWidget {
+  const MainNavigationShell({super.key});
 
   @override
-  State<MainShellScreen> createState() => _MainShellScreenState();
+  State<MainNavigationShell> createState() => _MainNavigationShellState();
 }
 
-class _MainShellScreenState extends State<MainShellScreen> {
+class _MainNavigationShellState extends State<MainNavigationShell> {
   int _currentIndex = 0;
 
-  late final List<Widget> _pages = [
-    const HomePrayerScreen(),
-    const AzkarScreen(),
-    const QuranScreen(),
-    const SettingsScreen(),
+  static const List<Widget> _pages = <Widget>[
+    PrayerTimesScreen(),
+    QuranScreen(),
+    AzkarScreen(),
   ];
 
   @override
@@ -72,33 +68,30 @@ class _MainShellScreenState extends State<MainShellScreen> {
         index: _currentIndex,
         children: _pages,
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: primaryColor,
-        unselectedItemColor: Colors.grey.shade600,
-        backgroundColor: Colors.white,
-        onTap: (index) {
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) {
           setState(() {
             _currentIndex = index;
           });
         },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'الرئيسية',
+        backgroundColor: Colors.white,
+        indicatorColor: primaryColor.withValues(alpha: 0.14),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.mosque_outlined),
+            selectedIcon: Icon(Icons.mosque),
+            label: 'مواقيت الصلاة',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.radio_button_checked),
+          NavigationDestination(
+            icon: Icon(Icons.menu_book_outlined),
+            selectedIcon: Icon(Icons.menu_book),
+            label: 'الختمة',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.spa_outlined),
+            selectedIcon: Icon(Icons.spa),
             label: 'الأذكار',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.menu_book),
-            label: 'المصحف',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.more_horiz),
-            label: 'والإعدادات',
           ),
         ],
       ),
