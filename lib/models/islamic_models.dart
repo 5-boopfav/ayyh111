@@ -15,102 +15,112 @@ class QuranVerseItem {
   });
 
   factory QuranVerseItem.fromJson(Map<String, dynamic> json) {
-    final rawSurah = json['surahNumber'] ?? json['sura'];
-    final rawAyah = json['ayahNumber'] ?? json['aya'];
-    final rawText = json['text'] ?? json['uthmani'];
+    final surahNum = _parseInt(
+      json['sura'] ?? json['surah'] ?? json['surah_number'] ?? json['sura_id'],
+      fallback: 1,
+    );
+    final ayahNum = _parseInt(
+      json['aya'] ?? json['ayah'] ?? json['verse'] ?? json['ayah_number'] ?? json['id'],
+      fallback: 1,
+    );
+    final rawName = (json['surah_name'] ?? json['sura_name'] ?? json['name'] ?? '')
+        .toString()
+        .trim();
+    final verseText = (json['uthmani'] ??
+            json['text'] ??
+            json['aya_text'] ??
+            json['verse_text'] ??
+            json['content'] ??
+            '')
+        .toString()
+        .trim();
 
     return QuranVerseItem(
-      surahNumber: (rawSurah as num?)?.toInt() ?? 1,
-      surahName: (json['surahName'] as String?)?.trim() ?? '',
-      ayahNumber: (rawAyah as num?)?.toInt() ?? 1,
-      text: (rawText as String?) ?? '',
+      surahNumber: surahNum,
+      surahName: rawName,
+      ayahNumber: ayahNum,
+      text: verseText,
     );
   }
 }
 
 class QuranPageData {
-  final int page;
+  final int pageNumber;
   final int juz;
   final List<QuranVerseItem> verses;
 
   const QuranPageData({
-    required this.page,
+    required this.pageNumber,
     required this.juz,
     required this.verses,
   });
-
-  factory QuranPageData.fromJson(Map<String, dynamic> json) {
-    final List<QuranVerseItem> parsedVerses = <QuranVerseItem>[];
-    final rawVerses = json['verses'];
-    if (rawVerses is List) {
-      for (final item in rawVerses) {
-        if (item is Map<String, dynamic>) {
-          parsedVerses.add(QuranVerseItem.fromJson(item));
-        }
-      }
-    }
-    return QuranPageData(
-      page: (json['page'] as num?)?.toInt() ?? 1,
-      juz: (json['juz'] as num?)?.toInt() ?? 1,
-      verses: parsedVerses,
-    );
-  }
 }
 
-class DhikrItem {
-  final String id;
+class HisnItem {
+  final int id;
   final String text;
-  final int repeatCount;
-  final String? reference;
+  final int count;
+  final String? audio;
+  final String? filename;
 
-  const DhikrItem({
+  const HisnItem({
     required this.id,
     required this.text,
-    required this.repeatCount,
-    this.reference,
+    required this.count,
+    this.audio,
+    this.filename,
   });
 
-  factory DhikrItem.fromJson(Map<String, dynamic> json) {
-    final rawId = json['id'];
-    final rawRepeat = json['repeatCount'] ?? json['count'];
-
-    return DhikrItem(
-      id: rawId == null ? '' : rawId.toString(),
-      text: (json['text'] as String?) ?? '',
-      repeatCount: (rawRepeat as num?)?.toInt() ?? 1,
-      reference: json['reference'] as String?,
+  factory HisnItem.fromJson(Map<String, dynamic> json, {int fallbackId = 1}) {
+    return HisnItem(
+      id: _parseInt(json['id'], fallback: fallbackId),
+      text: (json['text'] ?? json['dhikr'] ?? json['content'] ?? '')
+          .toString()
+          .trim(),
+      count: _parseInt(json['count'] ?? json['repeat'], fallback: 1),
+      audio: json['audio']?.toString(),
+      filename: json['filename']?.toString(),
     );
   }
 }
 
-class AzkarChapter {
-  final String id;
-  final String title;
-  final List<DhikrItem> items;
+class HisnCategory {
+  final int id;
+  final String category;
+  final List<HisnItem> items;
 
-  const AzkarChapter({
+  const HisnCategory({
     required this.id,
-    required this.title,
+    required this.category,
     required this.items,
   });
 
-  factory AzkarChapter.fromJson(Map<String, dynamic> json) {
-    final List<DhikrItem> parsedItems = <DhikrItem>[];
-    final rawList = json['items'] ?? json['array'];
-    if (rawList is List) {
-      for (final item in rawList) {
-        if (item is Map<String, dynamic>) {
-          parsedItems.add(DhikrItem.fromJson(item));
+  factory HisnCategory.fromJson(Map<String, dynamic> json, {int fallbackId = 1}) {
+    final rawArray = json['array'] ?? json['items'] ?? json['zikr'] ?? const [];
+    final List<HisnItem> parsedItems = <HisnItem>[];
+
+    if (rawArray is List) {
+      for (int i = 0; i < rawArray.length; i++) {
+        final entry = rawArray[i];
+        if (entry is Map<String, dynamic>) {
+          parsedItems.add(HisnItem.fromJson(entry, fallbackId: i + 1));
+        } else if (entry != null) {
+          parsedItems.add(
+            HisnItem(
+              id: i + 1,
+              text: entry.toString().trim(),
+              count: 1,
+            ),
+          );
         }
       }
     }
 
-    final rawId = json['id'];
-    final rawTitle = json['title'] ?? json['category'];
-
-    return AzkarChapter(
-      id: rawId == null ? '' : rawId.toString(),
-      title: (rawTitle as String?)?.trim() ?? '',
+    return HisnCategory(
+      id: _parseInt(json['id'], fallback: fallbackId),
+      category: (json['category'] ?? json['title'] ?? 'الأذكار')
+          .toString()
+          .trim(),
       items: parsedItems,
     );
   }
@@ -118,81 +128,127 @@ class AzkarChapter {
 
 class LocalIslamicRepository {
   LocalIslamicRepository._();
+
   static final LocalIslamicRepository instance = LocalIslamicRepository._();
 
-  Map<int, QuranPageData>? _quranPagesCache;
-  List<AzkarChapter>? _azkarChaptersCache;
+  Map<int, QuranPageData>? _cachedQuranPages;
+  List<HisnCategory>? _cachedHisnCategories;
 
-  Future<dynamic> loadQuranPages() async {
-    final cached = _quranPagesCache;
-    if (cached != null) return cached;
+  Future> loadQuranPages() async {
+    if (_cachedQuranPages != null) {
+      return _cachedQuranPages!;
+    }
 
     try {
-      final rawString =
+      final rawJson =
           await rootBundle.loadString('assets/data/quran_pages.json');
-      final decoded = jsonDecode(rawString);
-      final Map<int, QuranPageData> pagesMap = <int, QuranPageData>{};
+      final decoded = jsonDecode(rawJson);
+      final Map<int, List<QuranVerseItem>> groupedByPage =
+          <int, List<QuranVerseItem>>{};
 
       if (decoded is List) {
-        for (final entry in decoded) {
-          if (entry is Map<String, dynamic>) {
-            if (entry.containsKey('verses') || entry.containsKey('page')) {
-              final pageData = QuranPageData.fromJson(entry);
-              pagesMap[pageData.page] = pageData;
-            } else if (entry.containsKey('sura') ||
-                entry.containsKey('uthmani')) {
-              final pageNumber = (entry['page'] as num?)?.toInt() ?? 1;
-              final juzNumber = (entry['juz'] as num?)?.toInt() ?? 1;
-              final verse = QuranVerseItem.fromJson(entry);
-              final existingPage = pagesMap[pageNumber];
+        for (int i = 0; i < decoded.length; i++) {
+          final item = decoded[i];
+          if (item is Map<String, dynamic>) {
+            final pageNum = _parseInt(
+              item['page'] ?? item['page_number'],
+              fallback: 1,
+            ).clamp(1, 604);
+            final verse = QuranVerseItem.fromJson(item);
+            if (verse.text.isNotEmpty) {
+              groupedByPage
+                  .putIfAbsent(pageNum, () => <QuranVerseItem>[])
+                  .add(verse);
+            }
+          }
+        }
+      } else if (decoded is Map<String, dynamic>) {
+        final pagesNode = decoded['pages'];
+        if (pagesNode is Map) {
+          pagesNode.forEach((key, value) {
+            final pageNum = _parseInt(key, fallback: 1).clamp(1, 604);
+            if (value is List) {
+              for (final entry in value) {
+                if (entry is Map<String, dynamic>) {
+                  final verse = QuranVerseItem.fromJson(entry);
+                  if (verse.text.isNotEmpty) {
+                    groupedByPage
+                        .putIfAbsent(pageNum, () => <QuranVerseItem>[])
+                        .add(verse);
+                  }
+                }
+              }
+            }
+          });
+        }
+      }
 
-              if (existingPage == null) {
-                pagesMap[pageNumber] = QuranPageData(
-                  page: pageNumber,
-                  juz: juzNumber,
-                  verses: <QuranVerseItem>[verse],
-                );
-              } else {
-                pagesMap[pageNumber] = QuranPageData(
-                  page: existingPage.page,
-                  juz: existingPage.juz,
-                  verses: <QuranVerseItem>[...existingPage.verses, verse],
-                );
+      final Map<int, QuranPageData> result = <int, QuranPageData>{};
+      groupedByPage.forEach((pageNum, verses) {
+        final juzNum = (((pageNum - 1) ~/ 20) + 1).clamp(1, 30);
+        result[pageNum] = QuranPageData(
+          pageNumber: pageNum,
+          juz: juzNum,
+          verses: verses,
+        );
+      });
+
+      _cachedQuranPages = result;
+      return result;
+    } catch (_) {
+      return const <int, QuranPageData>{};
+    }
+  }
+
+  Future<List<HisnCategory>> loadHisnAlMuslim() async {
+    if (_cachedHisnCategories != null) {
+      return _cachedHisnCategories!;
+    }
+
+    try {
+      final rawJson =
+          await rootBundle.loadString('assets/data/hisn_al_muslim.json');
+      final decoded = jsonDecode(rawJson);
+      final List<HisnCategory> categories = <HisnCategory>[];
+
+      if (decoded is List) {
+        for (int i = 0; i < decoded.length; i++) {
+          final entry = decoded[i];
+          if (entry is Map<String, dynamic>) {
+            final cat = HisnCategory.fromJson(entry, fallbackId: i + 1);
+            if (cat.items.isNotEmpty) {
+              categories.add(cat);
+            }
+          }
+        }
+      } else if (decoded is Map<String, dynamic>) {
+        final listNode = decoded['categories'] ?? decoded['data'] ?? decoded['hisn'];
+        if (listNode is List) {
+          for (int i = 0; i < listNode.length; i++) {
+            final entry = listNode[i];
+            if (entry is Map<String, dynamic>) {
+              final cat = HisnCategory.fromJson(entry, fallbackId: i + 1);
+              if (cat.items.isNotEmpty) {
+                categories.add(cat);
               }
             }
           }
         }
       }
 
-      _quranPagesCache = pagesMap;
-      return pagesMap;
+      _cachedHisnCategories = categories;
+      return categories;
     } catch (_) {
-      return const <int, QuranPageData>{};
+      return const <HisnCategory>[];
     }
   }
+}
 
-  Future<dynamic> loadAzkarChapters() async {
-    final cached = _azkarChaptersCache;
-    if (cached != null) return cached;
-
-    try {
-      final rawString =
-          await rootBundle.loadString('assets/data/hisn_al_muslim.json');
-      final decoded = jsonDecode(rawString);
-      final List<AzkarChapter> chapters = <AzkarChapter>[];
-
-      if (decoded is List) {
-        for (final entry in decoded) {
-          if (entry is Map<String, dynamic>) {
-            chapters.add(AzkarChapter.fromJson(entry));
-          }
-        }
-      }
-
-      _azkarChaptersCache = chapters;
-      return chapters;
-    } catch (_) {
-      return const <AzkarChapter>[];
-    }
+int _parseInt(dynamic value, {required int fallback}) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) {
+    return int.tryParse(value.trim()) ?? fallback;
   }
+  return fallback;
 }
