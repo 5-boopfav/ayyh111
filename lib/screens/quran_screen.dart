@@ -32,13 +32,13 @@ class _QuranScreenState extends State<QuranScreen>
   int _dailyWirdPages = 20;
   double _fontScale = 1.0;
 
-  // حالة السحب والانحناء الفيزيائي للورقة
+  // حالة السحب من الجزء العلوي الأيسر نحو اليمين
   bool _isDragging = false;
   bool _openingNextPage = true; // true: يسار -> يمين (الصفحة التالية)
   double _rawProgress = 0.0;
   double _dragStartX = 0.0;
   double _dragStartY = 0.0;
-  double _pointerRatioY = 0.12; // يبدأ من الزاوية العلوية اليسرى تقريباً
+  double _pointerRatioY = 0.14;
 
   @override
   void initState() {
@@ -166,23 +166,19 @@ class _QuranScreenState extends State<QuranScreen>
     return (((pageNumber - 1) ~/ 20) + 1).clamp(1, 30);
   }
 
-  // منحنى زمني يحاكي المراحل الأربع للورقة مع تسارع غير خطي
+  // منحنى زمني يحاكي المراحل الأربع للورقة بـ easeInOutCubic
   double _shapedProgress(double t) {
     final clamped = t.clamp(0.0, 1.0);
     if (clamped <= 0.15) {
-      // المرحلة 1: لمسة خفيفة واستكشاف أولي (0.0 -> 0.15)
       final local = clamped / 0.15;
-      return Curves.easeOut.transform(local) * 0.10;
+      return Curves.easeOut.transform(local) * 0.12;
     } else if (clamped <= 0.55) {
-      // المرحلة 2: السحب نحو المنتصف والأسفل مع ازدياد الانحناء (0.15 -> 0.55)
       final local = (clamped - 0.15) / 0.40;
-      return 0.10 + Curves.easeInOutCubic.transform(local) * 0.45;
+      return 0.12 + Curves.easeInOutCubic.transform(local) * 0.43;
     } else if (clamped <= 0.80) {
-      // المرحلة 3: الطي حتى منتصف الورقة وكشف الصفحة التالية (0.55 -> 0.80)
       final local = (clamped - 0.55) / 0.25;
       return 0.55 + Curves.easeInOutCubic.transform(local) * 0.25;
     } else {
-      // المرحلة 4: إتمام القلب والاستقرار (0.80 -> 1.0)
       final local = (clamped - 0.80) / 0.20;
       return 0.80 + Curves.easeOutCubic.transform(local) * 0.20;
     }
@@ -197,7 +193,7 @@ class _QuranScreenState extends State<QuranScreen>
       _dragStartX = details.globalPosition.dx;
       _dragStartY = details.globalPosition.dy;
       _pointerRatioY =
-          height > 0 ? (_dragStartY / height).clamp(0.05, 0.90) : 0.12;
+          height > 0 ? (_dragStartY / height).clamp(0.04, 0.85) : 0.14;
       _rawProgress = 0.0;
     });
   }
@@ -210,17 +206,18 @@ class _QuranScreenState extends State<QuranScreen>
     if (!_isDragging || width <= 0) return;
 
     final deltaX = details.globalPosition.dx - _dragStartX;
-    final currentY = details.globalPosition.dy;
-    final ratioY = height > 0 ? (currentY / height).clamp(0.05, 0.90) : 0.15;
+    final ratioY = height > 0
+        ? (details.globalPosition.dy / height).clamp(0.04, 0.85)
+        : 0.14;
 
-    // السحب من اليسار إلى اليمين (deltaX > 0) يفتح الصفحة التالية
+    // السحب من اليسار إلى اليمين (deltaX > 0) يفتح الصفحة التالية من الجزء العلوي الأيسر
     if (deltaX > 0 && _currentPage < _totalPages) {
       _openingNextPage = true;
       _pointerRatioY = ratioY;
       _rawProgress = (deltaX / width).clamp(0.0, 1.0);
       setState(() {});
     }
-    // السحب من اليمين إلى اليسار (deltaX < 0) يعود للصفحة السابقة
+    // السحب من اليمين إلى اليسار (deltaX < 0) يرجع للصفحة السابقة
     else if (deltaX < 0 && _currentPage > 1) {
       _openingNextPage = false;
       _pointerRatioY = ratioY;
@@ -417,7 +414,7 @@ class _QuranScreenState extends State<QuranScreen>
     );
   }
 
-  Widget _buildFullMushafPage(int pageNumber, Color primaryColor) {
+  Widget _buildFullMushafPage(int pageNumber, {bool showControls = true}) {
     final paperColor =
         _nightMode ? const Color(0xFF14171A) : const Color(0xFFFFFDF8);
     final headerTextColor =
@@ -463,28 +460,29 @@ class _QuranScreenState extends State<QuranScreen>
       child: Stack(
         children: [
           Positioned.fill(child: imageWidget),
-          Positioned(
-            top: 8,
-            left: 10,
-            right: 10,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _FloatingCircleIcon(
-                  icon: Icons.search,
-                  color: headerTextColor,
-                  nightMode: _nightMode,
-                  onTap: _openGoToPageDialog,
-                ),
-                _FloatingCircleIcon(
-                  icon: Icons.menu,
-                  color: headerTextColor,
-                  nightMode: _nightMode,
-                  onTap: _openQuickMenuSheet,
-                ),
-              ],
+          if (showControls)
+            Positioned(
+              top: 8,
+              left: 10,
+              right: 10,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _FloatingCircleIcon(
+                    icon: Icons.search,
+                    color: headerTextColor,
+                    nightMode: _nightMode,
+                    onTap: _openGoToPageDialog,
+                  ),
+                  _FloatingCircleIcon(
+                    icon: Icons.menu,
+                    color: headerTextColor,
+                    nightMode: _nightMode,
+                    onTap: _openQuickMenuSheet,
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -492,7 +490,6 @@ class _QuranScreenState extends State<QuranScreen>
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = Theme.of(context).colorScheme.primary;
     final backgroundColor =
         _nightMode ? const Color(0xFF14171A) : const Color(0xFFFFFDF8);
     final effectiveProgress = _shapedProgress(_rawProgress);
@@ -509,6 +506,8 @@ class _QuranScreenState extends State<QuranScreen>
               final destinationPage = _openingNextPage
                   ? (_currentPage + 1).clamp(1, _totalPages)
                   : (_currentPage - 1).clamp(1, _totalPages);
+              final isCurling =
+                  effectiveProgress > 0.0 && destinationPage != _currentPage;
 
               return GestureDetector(
                 onHorizontalDragStart: (d) => _onHorizontalDragStart(d, height),
@@ -527,38 +526,40 @@ class _QuranScreenState extends State<QuranScreen>
                         _saveLastPage(page);
                       },
                       itemBuilder: (context, index) {
-                        return _buildFullMushafPage(index + 1, primaryColor);
+                        return _buildFullMushafPage(
+                          index + 1,
+                          showControls: !isCurling,
+                        );
                       },
                     ),
-                    if (effectiveProgress > 0.0 &&
-                        destinationPage != _currentPage) ...[
-                      // الصفحة المكشوفة أسفل الورقة المطوية
+                    if (isCurling) ...[
+                      // 1. الصفحة التالية/السابقة المكشوفة أسفل الجزء المنثني
                       Positioned.fill(
                         child: _buildFullMushafPage(
                           destinationPage,
-                          primaryColor,
+                          showControls: false,
                         ),
                       ),
-                      // الجزء المتبقي غير المطوي من الصفحة الحالية (محور الارتكاز على اليمين)
+                      // 2. قص الجزء المتبقي من الصفحة الحالية ليظهر انثناء الجزء العلوي الأيسر
                       Positioned.fill(
                         child: ClipPath(
-                          clipper: _MushafPageClipper(
+                          clipper: _TopLeftCornerCurlClipper(
                             progress: effectiveProgress,
                             openingNextPage: _openingNextPage,
                             pointerRatioY: _pointerRatioY,
                           ),
                           child: _buildFullMushafPage(
                             _currentPage,
-                            primaryColor,
+                            showControls: false,
                           ),
                         ),
                       ),
-                      // حافة الطي والظل الديناميكي المتغير مع الانحناء
+                      // 3. رسم وجه/ظهر الورقة المنثنية من الأعلى لليسار والظل الواقعي تحتها
                       Positioned.fill(
                         child: IgnorePointer(
                           child: CustomPaint(
                             size: Size(width, height),
-                            painter: _MushafCurlShadowPainter(
+                            painter: _TopLeftCornerCurlPainter(
                               progress: effectiveProgress,
                               openingNextPage: _openingNextPage,
                               pointerRatioY: _pointerRatioY,
@@ -611,12 +612,13 @@ class _FloatingCircleIcon extends StatelessWidget {
   }
 }
 
-class _MushafPageClipper extends CustomClipper<Path> {
+/// يقص الجزء المتبقي من الصفحة الحالية مع فتح انثناء من الجزء العلوي الأيسر نحو اليمين
+class _TopLeftCornerCurlClipper extends CustomClipper<Path> {
   final double progress;
   final bool openingNextPage;
   final double pointerRatioY;
 
-  const _MushafPageClipper({
+  const _TopLeftCornerCurlClipper({
     required this.progress,
     required this.openingNextPage,
     required this.pointerRatioY,
@@ -627,32 +629,32 @@ class _MushafPageClipper extends CustomClipper<Path> {
     final p = progress.clamp(0.0, 1.0);
     final path = Path();
 
-    // عند فتح الصفحة التالية (يسار -> يمين): الحافة اليسرى تنزاح يميناً نحو العمود الفقري (اليمين)
     if (openingNextPage) {
-      final topEdgeX = size.width * p;
-      final bottomLag = (p * 0.14).clamp(0.0, 1.0);
-      final bottomEdgeX = size.width * bottomLag;
-      final bendBulge = 28.0 * math.sin(p * math.pi);
-      final controlY = (size.height * pointerRatioY).clamp(0.0, size.height);
-      final controlX = ((topEdgeX + bottomEdgeX) * 0.5 + bendBulge)
+      // انثناء يبدأ من الزاوية العلوية اليسرى ويتسع نحو اليمين والأسفل
+      final topCutX = (size.width * (p * 0.92)).clamp(0.0, size.width);
+      final leftCutY = (size.height * (0.14 + p * 0.72 * (0.4 + pointerRatioY)))
+          .clamp(0.0, size.height);
+      final ctrlX = (topCutX * 0.55 + size.width * 0.08 * math.sin(p * math.pi))
           .clamp(0.0, size.width);
+      final ctrlY = (leftCutY * 0.55).clamp(0.0, size.height);
 
-      path.moveTo(topEdgeX, 0);
+      path.moveTo(topCutX, 0);
       path.lineTo(size.width, 0);
       path.lineTo(size.width, size.height);
-      path.lineTo(bottomEdgeX, size.height);
-      path.quadraticBezierTo(controlX, controlY, topEdgeX, 0);
+      path.lineTo(0, size.height);
+      path.lineTo(0, leftCutY);
+      path.quadraticBezierTo(ctrlX, ctrlY, topCutX, 0);
       path.close();
     } else {
-      // عند الرجوع للصفحة السابقة (يمين -> يسار)
-      final foldX = size.width * (1.0 - p);
-      final bendBulge = 24.0 * math.sin(p * math.pi);
-      final controlY = (size.height * pointerRatioY).clamp(0.0, size.height);
-      final controlX = (foldX - bendBulge).clamp(0.0, size.width);
-
+      final foldX = (size.width * (1.0 - p)).clamp(0.0, size.width);
       path.moveTo(0, 0);
       path.lineTo(foldX, 0);
-      path.quadraticBezierTo(controlX, controlY, foldX, size.height);
+      path.quadraticBezierTo(
+        foldX - 20 * math.sin(p * math.pi),
+        size.height * pointerRatioY,
+        foldX,
+        size.height,
+      );
       path.lineTo(0, size.height);
       path.close();
     }
@@ -661,20 +663,21 @@ class _MushafPageClipper extends CustomClipper<Path> {
   }
 
   @override
-  bool shouldReclip(covariant _MushafPageClipper oldClipper) {
+  bool shouldReclip(covariant _TopLeftCornerCurlClipper oldClipper) {
     return oldClipper.progress != progress ||
         oldClipper.openingNextPage != openingNextPage ||
         oldClipper.pointerRatioY != pointerRatioY;
   }
 }
 
-class _MushafCurlShadowPainter extends CustomPainter {
+/// يرسم الظل الواقعي تحت الثنية والجزء المنثني بلون ورقي دافئ من الأعلى لليسار
+class _TopLeftCornerCurlPainter extends CustomPainter {
   final double progress;
   final bool openingNextPage;
   final double pointerRatioY;
   final bool nightMode;
 
-  const _MushafCurlShadowPainter({
+  const _TopLeftCornerCurlPainter({
     required this.progress,
     required this.openingNextPage,
     required this.pointerRatioY,
@@ -686,72 +689,93 @@ class _MushafCurlShadowPainter extends CustomPainter {
     final p = progress.clamp(0.0, 1.0);
     if (p <= 0.0) return;
 
-    // شدة الظل والانحناء تزداد مع تقدم الطي ثم تهدأ قرب النهاية
-    final liftFactor = math.sin(p * math.pi).clamp(0.15, 1.0);
-    final baseAlpha = nightMode ? 0.52 : 0.28;
-    final shadowAlpha = (baseAlpha * liftFactor).clamp(0.05, 0.65);
+    final lift = math.sin(p * math.pi).clamp(0.1, 1.0);
 
     if (openingNextPage) {
-      final topEdgeX = size.width * p;
-      final bottomLag = (p * 0.14).clamp(0.0, 1.0);
-      final bottomEdgeX = size.width * bottomLag;
-      final bendBulge = 28.0 * math.sin(p * math.pi);
-      final controlY = (size.height * pointerRatioY).clamp(0.0, size.height);
-      final controlX = ((topEdgeX + bottomEdgeX) * 0.5 + bendBulge)
+      final topCutX = (size.width * (p * 0.92)).clamp(0.0, size.width);
+      final leftCutY = (size.height * (0.14 + p * 0.72 * (0.4 + pointerRatioY)))
+          .clamp(0.0, size.height);
+      final ctrlX = (topCutX * 0.55 + size.width * 0.08 * lift)
           .clamp(0.0, size.width);
+      final ctrlY = (leftCutY * 0.55).clamp(0.0, size.height);
 
-      final foldPath = Path()
-        ..moveTo(topEdgeX, 0)
-        ..quadraticBezierTo(controlX, controlY, bottomEdgeX, size.height);
+      // حافة الانثناء نفسها
+      final creasePath = Path()
+        ..moveTo(topCutX, 0)
+        ..quadraticBezierTo(ctrlX, ctrlY, 0, leftCutY);
 
-      // ظل ناعم يمتد إلى يسار حافة الطي فوق الصفحة المكشوفة
-      final castShadowPaint = Paint()
-        ..color = Colors.black.withValues(alpha: shadowAlpha * 0.75)
+      // ظل ناعم يقع أسفل الثنية على الصفحة التحتية
+      final underShadowPaint = Paint()
+        ..color = Colors.black.withValues(alpha: (0.28 * lift).clamp(0.04, 0.42))
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 18.0 + (22.0 * liftFactor)
+        ..strokeWidth = 18.0 + 16.0 * lift
         ..maskFilter = MaskFilter.blur(
           BlurStyle.normal,
-          8.0 + (12.0 * liftFactor),
+          8.0 + 10.0 * lift,
         );
-
-      // خط الطي المباشر لإبراز ثنية الورقة
-      final creasePaint = Paint()
-        ..color = (nightMode ? Colors.white24 : Colors.black38)
-            .withValues(alpha: (0.25 + 0.35 * liftFactor).clamp(0.0, 0.65))
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0;
 
       canvas.save();
-      canvas.translate(-10.0 * liftFactor, 0);
-      canvas.drawPath(foldPath, castShadowPaint);
+      canvas.translate(4.0 * lift, 5.0 * lift);
+      canvas.drawPath(creasePath, underShadowPaint);
       canvas.restore();
 
-      canvas.drawPath(foldPath, creasePaint);
+      // الجزء المنثني من الورقة مع تدرج لوني دافئ يحاكي ظهر الورقة
+      final flapLiftX = (topCutX + size.width * 0.14 * lift)
+          .clamp(0.0, size.width);
+      final flapLiftY = (leftCutY * 0.25 + size.height * 0.04 * lift)
+          .clamp(0.0, size.height);
+
+      final flapPath = Path()
+        ..moveTo(topCutX, 0)
+        ..quadraticBezierTo(ctrlX, ctrlY, 0, leftCutY)
+        ..lineTo(0, flapLiftY.clamp(0.0, leftCutY))
+        ..quadraticBezierTo(
+          (ctrlX + flapLiftX) * 0.5,
+          (ctrlY * 0.45).clamp(0.0, size.height),
+          flapLiftX,
+          0,
+        )
+        ..close();
+
+      final paperBackPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: nightMode
+              ? [
+                  const Color(0xFF2D333B).withValues(alpha: 0.92),
+                  const Color(0xFF1D2227).withValues(alpha: 0.95),
+                ]
+              : [
+                  const Color(0xFFFDF8EC).withValues(alpha: 0.96),
+                  const Color(0xFFE5D5B5).withValues(alpha: 0.94),
+                ],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+      canvas.drawPath(flapPath, paperBackPaint);
     } else {
-      final foldX = size.width * (1.0 - p);
-      final bendBulge = 24.0 * math.sin(p * math.pi);
-      final controlY = (size.height * pointerRatioY).clamp(0.0, size.height);
-      final controlX = (foldX - bendBulge).clamp(0.0, size.width);
-
-      final foldPath = Path()
+      final foldX = (size.width * (1.0 - p)).clamp(0.0, size.width);
+      final shadowPath = Path()
         ..moveTo(foldX, 0)
-        ..quadraticBezierTo(controlX, controlY, foldX, size.height);
-
-      final shadowPaint = Paint()
-        ..color = Colors.black.withValues(alpha: shadowAlpha)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 14.0 + (18.0 * liftFactor)
-        ..maskFilter = MaskFilter.blur(
-          BlurStyle.normal,
-          6.0 + (10.0 * liftFactor),
+        ..quadraticBezierTo(
+          foldX - 20 * lift,
+          size.height * pointerRatioY,
+          foldX,
+          size.height,
         );
 
-      canvas.drawPath(foldPath, shadowPaint);
+      final shadowPaint = Paint()
+        ..color = Colors.black.withValues(alpha: (0.25 * lift).clamp(0.04, 0.38))
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 16.0
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8.0);
+
+      canvas.drawPath(shadowPath, shadowPaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _MushafCurlShadowPainter oldDelegate) {
+  bool shouldRepaint(covariant _TopLeftCornerCurlPainter oldDelegate) {
     return oldDelegate.progress != progress ||
         oldDelegate.openingNextPage != openingNextPage ||
         oldDelegate.pointerRatioY != pointerRatioY ||
