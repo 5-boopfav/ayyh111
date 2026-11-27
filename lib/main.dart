@@ -298,6 +298,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     with SingleTickerProviderStateMixin {
   static const int totalPages = 604;
 
+  // لون الحبل الأحمر أخف وأهدأ (لقطة أ)
   static const Color _softBookmarkRed = Color(0xFFC94A4A);
   static const Color _softBookmarkRedLight = Color(0xFFD96B6B);
   static const Color _softBookmarkRedDark = Color(0xFF9E3434);
@@ -342,7 +343,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     super.initState();
     _settleCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 240),
+      duration: const Duration(milliseconds: 220),
     )
       ..addListener(() {
         if (_settleAnim != null) {
@@ -658,127 +659,141 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
 
     return Scaffold(
       backgroundColor: palette.background,
-      appBar: AppBar(
-        backgroundColor: palette.background,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        title: Row(
-          children: [
-            Flexible(
-              child: Text(
-                'سورة ${_currentSurah.name}',
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: palette.ink,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '${_currentJuz.title} • ص $_currentPage',
-              style: TextStyle(
-                color: palette.ink.withValues(alpha: 0.72),
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: hasBookmarkOnCurrent
-                ? 'إزالة الحبل الأحمر من هذه الصفحة'
-                : 'إنزال الحبل الأحمر على هذه الصفحة',
-            icon: Icon(
-              Icons.bookmark,
-              color: hasBookmarkOnCurrent
-                  ? _softBookmarkRed
-                  : palette.ink.withValues(alpha: 0.75),
-            ),
-            onPressed: _toggleBookmark,
-          ),
-          if (_bookmarkedPage != null && !hasBookmarkOnCurrent)
-            IconButton(
-              tooltip: 'الذهاب إلى علامة الحفظ (ص $_bookmarkedPage)',
-              icon: const Icon(
-                Icons.turned_in,
-                color: _softBookmarkRed,
-              ),
-              onPressed: () => _jumpToPage(_bookmarkedPage!),
-            ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final double width = constraints.maxWidth;
-                final double height = constraints.maxHeight;
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final double width = constraints.maxWidth;
+            final double height = constraints.maxHeight;
 
-                return Listener(
-                  behavior: HitTestBehavior.opaque,
-                  onPointerDown: (e) => _handlePointerDown(e, width, height),
-                  onPointerMove: (e) => _handlePointerMove(e, width, height),
-                  onPointerUp: (e) => _handlePointerEnd(e.pointer),
-                  onPointerCancel: (e) => _handlePointerEnd(e.pointer),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (isTurning)
-                        _NextPageUnderlay(
-                          imageProvider: _providerForPage(underPage),
-                          pageNumber: underPage,
-                          palette: palette,
-                          scale: _pageScale,
-                          progress: _progress,
-                        ),
-                      _RealisticPaperCurlEngine(
-                        currentProvider: _providerForPage(_currentPage),
-                        backProvider: _providerForPage(underPage),
-                        currentPage: _currentPage,
-                        backPage: underPage,
-                        width: width,
-                        height: height,
-                        direction: isTurning ? _dragDir : 0,
-                        progress: isTurning ? _progress : 0.0,
-                        dyRatio: _dyRatio,
-                        touchXRatio: _touchXRatio,
-                        verticalTravelRatio: _verticalTravelRatio,
-                        palette: palette,
-                        scale: _pageScale,
-                      ),
-                      if (hasBookmarkOnCurrent)
-                        _RedBookmarkCordOverlay(
-                          pageHeight: height,
-                          dropRatio: _ribbonDropRatio,
-                          onDropRatioChanged: (newRatio) {
-                            setState(() => _ribbonDropRatio = newRatio);
-                          },
-                          onDragEnd: _saveState,
+            return Listener(
+              behavior: HitTestBehavior.opaque,
+              onPointerDown: (e) => _handlePointerDown(e, width, height),
+              onPointerMove: (e) => _handlePointerMove(e, width, height),
+              onPointerUp: (e) => _handlePointerEnd(e.pointer),
+              onPointerCancel: (e) => _handlePointerEnd(e.pointer),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (isTurning)
+                    _NextPageUnderlay(
+                      imageProvider: _providerForPage(underPage),
+                      pageNumber: underPage,
+                      surahName: _surahForPage(underPage).name,
+                      juzTitle: _juzForPage(underPage).title,
+                      palette: palette,
+                      scale: _pageScale,
+                      progress: _progress,
+                    ),
+                  _RealisticPaperCurlEngine(
+                    currentProvider: _providerForPage(_currentPage),
+                    backProvider: _providerForPage(underPage),
+                    currentPage: _currentPage,
+                    backPage: underPage,
+                    currentSurahName: _currentSurah.name,
+                    currentJuzTitle: _currentJuz.title,
+                    backSurahName: _surahForPage(underPage).name,
+                    backJuzTitle: _juzForPage(underPage).title,
+                    width: width,
+                    height: height,
+                    direction: isTurning ? _dragDir : 0,
+                    progress: isTurning ? _progress : 0.0,
+                    dyRatio: _dyRatio,
+                    touchXRatio: _touchXRatio,
+                    verticalTravelRatio: _verticalTravelRatio,
+                    palette: palette,
+                    scale: _pageScale,
+                  ),
+                  if (hasBookmarkOnCurrent)
+                    _RedBookmarkCordOverlay(
+                      pageHeight: height,
+                      dropRatio: _ribbonDropRatio,
+                      onDropRatioChanged: (newRatio) {
+                        setState(() => _ribbonDropRatio = newRatio);
+                      },
+                      onDragEnd: _saveState,
+                      onTap: _toggleBookmark,
+                    ),
+                  // أزرار سريعة صغيرة وهادئة للحبل الأحمر والانتقال إليه في الزاوية العلوية
+                  Positioned(
+                    top: 30,
+                    left: 14,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _TopQuickChip(
+                          icon: Icons.bookmark,
+                          color: hasBookmarkOnCurrent
+                              ? _softBookmarkRed
+                              : palette.ink.withValues(alpha: 0.72),
+                          bgColor: palette.paper.withValues(alpha: 0.92),
+                          borderColor: palette.outerFrame,
+                          tooltip: hasBookmarkOnCurrent
+                              ? 'إزالة الحبل الأحمر'
+                              : 'إنزال الحبل الأحمر',
                           onTap: _toggleBookmark,
                         ),
-                    ],
+                        if (_bookmarkedPage != null && !hasBookmarkOnCurrent) ...[
+                          const SizedBox(width: 6),
+                          _TopQuickChip(
+                            icon: Icons.turned_in,
+                            color: _softBookmarkRed,
+                            bgColor: palette.paper.withValues(alpha: 0.92),
+                            borderColor: palette.outerFrame,
+                            tooltip: 'الانتقال إلى الحبل الأحمر (ص $_bookmarkedPage)',
+                            onTap: () => _jumpToPage(_bookmarkedPage!),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                );
-              },
-            ),
-          ),
-          if (_showBottomBar)
-            _BottomBar(
-              palette: palette,
-              wirdRead: _wirdReadToday,
-              wirdGoal: _dailyWirdGoalPages,
-              onOpenSurahs: () => _openSurahs(palette),
-              onOpenJuz: () => _openJuz(palette),
-              onOpenWird: _openWird,
-              onOpenScale: () => _openScale(palette),
-              onOpenTheme: () => _openThemeCustomizer(palette),
-            ),
-        ],
+                  // الشريط السفلي عائم فوق الصفحة دون رفعها أو تغيير موضعها (نقطة 2)
+                  if (_showBottomBar)
+                    Positioned(
+                      left: 10,
+                      right: 10,
+                      bottom: 10,
+                      child: _FloatingBottomBar(
+                        palette: palette,
+                        wirdRead: _wirdReadToday,
+                        wirdGoal: _dailyWirdGoalPages,
+                        onOpenSurahs: () => _openSurahs(palette),
+                        onOpenJuz: () => _openJuz(palette),
+                        onOpenWird: _openWird,
+                        onOpenScale: () => _openScale(palette),
+                        onOpenTheme: () => _openThemeCustomizer(palette),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
+  }
+
+  SurahInfo _surahForPage(int page) {
+    SurahInfo res = kSurahs.first;
+    for (final s in kSurahs) {
+      if (s.startPage <= page) {
+        res = s;
+      } else {
+        break;
+      }
+    }
+    return res;
+  }
+
+  JuzInfo _juzForPage(int page) {
+    JuzInfo res = kJuzList.first;
+    for (final j in kJuzList) {
+      if (j.startPage <= page) {
+        res = j;
+      } else {
+        break;
+      }
+    }
+    return res;
   }
 
   void _openThemeCustomizer(PageThemePalette currentPalette) {
@@ -1158,6 +1173,47 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   }
 }
 
+class _TopQuickChip extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final Color bgColor;
+  final Color borderColor;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _TopQuickChip({
+    required this.icon,
+    required this.color,
+    required this.bgColor,
+    required this.borderColor,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: bgColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: borderColor.withValues(alpha: 0.65)),
+        ),
+        elevation: 1,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Icon(icon, size: 18, color: color),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RedBookmarkCordOverlay extends StatelessWidget {
   final double pageHeight;
   final double dropRatio;
@@ -1180,7 +1236,7 @@ class _RedBookmarkCordOverlay extends StatelessWidget {
 
     return Positioned(
       top: 0,
-      left: 34,
+      left: 56,
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: onTap,
@@ -1191,7 +1247,7 @@ class _RedBookmarkCordOverlay extends StatelessWidget {
         },
         onVerticalDragEnd: (_) => onDragEnd(),
         child: CustomPaint(
-          size: Size(26, cordLength + 18),
+          size: Size(24, cordLength + 18),
           painter: _RedCordPainter(cordLength: cordLength),
         ),
       ),
@@ -1206,7 +1262,7 @@ class _RedCordPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const double cordWidth = 6.5;
+    const double cordWidth = 6.0;
     final double centerX = size.width * 0.5;
     final double leftX = centerX - cordWidth * 0.5;
     final double rightX = centerX + cordWidth * 0.5;
@@ -1222,8 +1278,8 @@ class _RedCordPainter extends CustomPainter {
     canvas.drawPath(
       shadowPath,
       Paint()
-        ..color = Colors.black.withValues(alpha: 0.18)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.8),
+        ..color = Colors.black.withValues(alpha: 0.16)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
     );
 
     final Paint cordPaint = Paint()
@@ -1250,7 +1306,7 @@ class _RedCordPainter extends CustomPainter {
 
     canvas.drawCircle(
       Offset(centerX, cordLength + 12),
-      2.6,
+      2.5,
       Paint()..color = _MushafReaderScreenState._softBookmarkRedDark,
     );
   }
@@ -1263,6 +1319,8 @@ class _RedCordPainter extends CustomPainter {
 class _NextPageUnderlay extends StatelessWidget {
   final ImageProvider imageProvider;
   final int pageNumber;
+  final String surahName;
+  final String juzTitle;
   final PageThemePalette palette;
   final double scale;
   final double progress;
@@ -1270,6 +1328,8 @@ class _NextPageUnderlay extends StatelessWidget {
   const _NextPageUnderlay({
     required this.imageProvider,
     required this.pageNumber,
+    required this.surahName,
+    required this.juzTitle,
     required this.palette,
     required this.scale,
     required this.progress,
@@ -1285,6 +1345,8 @@ class _NextPageUnderlay extends StatelessWidget {
           child: MushafSingleSheet(
             imageProvider: imageProvider,
             pageNumber: pageNumber,
+            surahName: surahName,
+            juzTitle: juzTitle,
             palette: palette,
             scale: scale,
           ),
@@ -1299,11 +1361,16 @@ class _NextPageUnderlay extends StatelessWidget {
   }
 }
 
+/// نقطة (1) وسلاسة انقلاب الصورة: تحريك الورقة/الصورة نفسها فعلياً أثناء السحب
 class _RealisticPaperCurlEngine extends StatelessWidget {
   final ImageProvider currentProvider;
   final ImageProvider backProvider;
   final int currentPage;
   final int backPage;
+  final String currentSurahName;
+  final String currentJuzTitle;
+  final String backSurahName;
+  final String backJuzTitle;
   final double width;
   final double height;
   final int direction;
@@ -1319,6 +1386,10 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
     required this.backProvider,
     required this.currentPage,
     required this.backPage,
+    required this.currentSurahName,
+    required this.currentJuzTitle,
+    required this.backSurahName,
+    required this.backJuzTitle,
     required this.width,
     required this.height,
     required this.direction,
@@ -1337,6 +1408,8 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
         child: MushafSingleSheet(
           imageProvider: currentProvider,
           pageNumber: currentPage,
+          surahName: currentSurahName,
+          juzTitle: currentJuzTitle,
           palette: palette,
           scale: scale,
         ),
@@ -1353,11 +1426,24 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
     );
 
     final double midArch = math.sin(progress * math.pi);
+
+    // حركة الصورة/الورقة الأمامية نفسها مع الانحناء والسحب دون ثبات أعمى
+    final double frontShiftX =
+        -direction * (width * 0.045 * midArch + width * 0.06 * progress);
+    final double frontShiftY = verticalTravelRatio * height * 0.03 * midArch;
+    final Matrix4 frontLeafTransform = Matrix4.identity()
+      ..translate(frontShiftX, frontShiftY, 0.0)
+      ..rotateZ(direction * 0.015 * midArch);
+
+    // حركة وانحناء الوجه الخلفي للورقة نفسها
     final double liftAngleY = -direction * (0.24 * midArch);
     final double tiltAngleX =
         ((dyRatio - 0.5) * 0.12 + verticalTravelRatio * 0.14) * midArch;
+    final double flapShiftX =
+        -direction * (model.curlDepth * 0.22 * midArch);
     final Matrix4 backPerspective = Matrix4.identity()
       ..setEntry(3, 2, 0.0012)
+      ..translate(flapShiftX, frontShiftY * 0.8, 0.0)
       ..rotateY(liftAngleY)
       ..rotateX(tiltAngleX);
 
@@ -1365,9 +1451,11 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         IgnorePointer(
-          child: CustomPaint(
-            size: Size(width, height),
-            painter: _UnderPageCastShadowPainter(model: model),
+          child: RepaintBoundary(
+            child: CustomPaint(
+              size: Size(width, height),
+              painter: _UnderPageCastShadowPainter(model: model),
+            ),
           ),
         ),
         ClipPath(
@@ -1375,12 +1463,18 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              RepaintBoundary(
-                child: MushafSingleSheet(
-                  imageProvider: currentProvider,
-                  pageNumber: currentPage,
-                  palette: palette,
-                  scale: scale,
+              Transform(
+                alignment: Alignment.center,
+                transform: frontLeafTransform,
+                child: RepaintBoundary(
+                  child: MushafSingleSheet(
+                    imageProvider: currentProvider,
+                    pageNumber: currentPage,
+                    surahName: currentSurahName,
+                    juzTitle: currentJuzTitle,
+                    palette: palette,
+                    scale: scale,
+                  ),
                 ),
               ),
               IgnorePointer(
@@ -1405,11 +1499,13 @@ class _RealisticPaperCurlEngine extends StatelessWidget {
                   alignment: Alignment.center,
                   transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
                   child: Opacity(
-                    opacity: 0.45,
+                    opacity: 0.44,
                     child: RepaintBoundary(
                       child: MushafSingleSheet(
                         imageProvider: backProvider,
                         pageNumber: backPage,
+                        surahName: backSurahName,
+                        juzTitle: backJuzTitle,
                         palette: palette,
                         scale: scale,
                       ),
@@ -1482,6 +1578,7 @@ class _CurlMeshModel {
     final double h = size.height;
     final double p = progress.clamp(0.0, 1.0);
 
+    // 1. الانحناء والتقوّس: يبدأ مبكراً ويلين عند الاكتمال
     final double bell = math.sin(p * math.pi).clamp(0.0, 1.0);
     final double earlyBowFactor = math.pow(bell, 0.75).toDouble();
     final double bow = w * 0.115 * earlyBowFactor;
@@ -1489,11 +1586,14 @@ class _CurlMeshModel {
     final double flapDepth =
         (w * (0.12 + 0.24 * math.sin(p * math.pi * 0.78))).clamp(16.0, w * 0.38);
 
+    // 2. ميل الطي: مرتبط بحركة الإصبع ومتصل بالمنتصف
     final double verticalBias = (dyRatio - 0.5) * 2.0;
     final double motionTilt = (verticalTravelRatio * 1.6).clamp(-0.65, 0.65);
     final double horizontalBias = (touchXRatio - 0.5).abs();
-    final double diagonalSkew =
-        (verticalBias * 0.65 + motionTilt) * w * (0.22 + 0.06 * horizontalBias) * p;
+    final double diagonalSkew = (verticalBias * 0.65 + motionTilt) *
+        w *
+        (0.22 + 0.06 * horizontalBias) *
+        p;
 
     final double blendedRatioY = ui.lerpDouble(0.5, dyRatio, 0.68)!;
     final double fy = (h * blendedRatioY).clamp(h * 0.16, h * 0.84);
@@ -1799,9 +1899,14 @@ class _BackFaceShadingPainter extends CustomPainter {
       oldDelegate.model != model || oldDelegate.paperTint != paperTint;
 }
 
+/// نقاط (3) و(4) و(5):
+/// - إطار يحيط بالشاشة بالكامل من رأسها إلى أسفلها وينقطع في الأعلى ليتصل بمربع السورة ومربع الجزء.
+/// - النص/الصورة تبدأ من تحت الإطار مباشرة حتى الأسفل بملء مريح للصفحة دون فراغات علوية أو سفلية زائدة.
 class MushafSingleSheet extends StatelessWidget {
   final ImageProvider? imageProvider;
   final int pageNumber;
+  final String surahName;
+  final String juzTitle;
   final PageThemePalette palette;
   final double scale;
 
@@ -1809,6 +1914,8 @@ class MushafSingleSheet extends StatelessWidget {
     super.key,
     this.imageProvider,
     required this.pageNumber,
+    required this.surahName,
+    required this.juzTitle,
     required this.palette,
     required this.scale,
   });
@@ -1823,50 +1930,56 @@ class MushafSingleSheet extends StatelessWidget {
       scale: scale,
       child: Container(
         color: palette.paper,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: CustomPaint(
-          painter: _QuranFramePainter(
+          painter: _ConnectedQuranFramePainter(
             outerColor: palette.outerFrame,
             innerColor: palette.innerFrame,
             paperColor: palette.paper,
+            accentColor: palette.accent,
+            inkColor: palette.ink,
+            surahLabel: 'سورة $surahName',
+            juzLabel: juzTitle,
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-            child: Image(
-              image: resolvedProvider,
-              fit: BoxFit.contain,
-              gaplessPlayback: true,
-              errorBuilder: (context, error, stackTrace) {
-                return Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.auto_stories,
-                        size: 44,
-                        color: palette.outerFrame.withValues(alpha: 0.7),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'صفحة المصحف رقم $pageNumber من 604',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: palette.ink,
+            // يبدأ من تحت الإطار العلوي مباشرة ويمتد حتى الأسفل دون فراغات مزعجة
+            padding: const EdgeInsets.fromLTRB(12, 34, 12, 12),
+            child: SizedBox.expand(
+              child: Image(
+                image: resolvedProvider,
+                fit: BoxFit.fill,
+                gaplessPlayback: true,
+                errorBuilder: (context, error, stackTrace) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.auto_stories,
+                          size: 44,
+                          color: palette.outerFrame.withValues(alpha: 0.7),
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        assetPath,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: palette.ink.withValues(alpha: 0.65),
+                        const SizedBox(height: 10),
+                        Text(
+                          'صفحة المصحف رقم $pageNumber من 604',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: palette.ink,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              },
+                        const SizedBox(height: 6),
+                        Text(
+                          assetPath,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: palette.ink.withValues(alpha: 0.65),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -1875,21 +1988,32 @@ class MushafSingleSheet extends StatelessWidget {
   }
 }
 
-class _QuranFramePainter extends CustomPainter {
+class _ConnectedQuranFramePainter extends CustomPainter {
   final Color outerColor;
   final Color innerColor;
   final Color paperColor;
+  final Color accentColor;
+  final Color inkColor;
+  final String surahLabel;
+  final String juzLabel;
 
-  _QuranFramePainter({
+  _ConnectedQuranFramePainter({
     required this.outerColor,
     required this.innerColor,
     required this.paperColor,
+    required this.accentColor,
+    required this.inkColor,
+    required this.surahLabel,
+    required this.juzLabel,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Rect outer = Offset.zero & size;
-    final Rect inner = outer.deflate(7.5);
+    if (size.width <= 40 || size.height <= 40) return;
+
+    const double topInset = 22.0;
+    final Rect outer = Rect.fromLTRB(6, topInset, size.width - 6, size.height - 6);
+    final Rect inner = outer.deflate(5.5);
 
     final Paint outerPaint = Paint()
       ..color = outerColor
@@ -1899,59 +2023,120 @@ class _QuranFramePainter extends CustomPainter {
     final Paint innerPaint = Paint()
       ..color = innerColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.1;
+      ..strokeWidth = 1.0;
 
-    canvas.drawRect(outer, outerPaint);
+    // في RTL: اليمين للأعلى هو مربع السورة (مثل سورة البقرة)، واليسار للأعلى هو مربع الجزء
+    const double boxHeight = 28.0;
+    const double surahBoxWidth = 122.0;
+    const double juzBoxWidth = 114.0;
+
+    final Rect surahRect = Rect.fromLTWH(
+      outer.right - surahBoxWidth - 10,
+      2,
+      surahBoxWidth,
+      boxHeight,
+    );
+    final Rect juzRect = Rect.fromLTWH(
+      outer.left + 10,
+      2,
+      juzBoxWidth,
+      boxHeight,
+    );
+
+    // رسم الإطار الخارجي والداخلي مع انقطاع علوي عند موضع المربعين ليتصل بهما مباشرة
+    final Path outerPath = Path()
+      // يمين الإطار من الأسفل إلى أسفل مربع السورة
+      ..moveTo(outer.right, outer.bottom)
+      ..lineTo(outer.right, surahRect.bottom)
+      ..lineTo(surahRect.right, surahRect.bottom)
+      ..moveTo(surahRect.left, surahRect.bottom)
+      ..lineTo(juzRect.right, outer.top)
+      ..moveTo(juzRect.left, outer.top)
+      ..lineTo(outer.left, outer.top)
+      ..lineTo(outer.left, outer.bottom)
+      ..lineTo(outer.right, outer.bottom);
+
+    canvas.drawPath(outerPath, outerPaint);
     canvas.drawRect(inner, innerPaint);
 
-    const double cornerLen = 18.0;
-    final Paint cornerPaint = Paint()
-      ..color = outerColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
-      ..strokeCap = StrokeCap.square;
+    // رسم مربع السورة ومربع الجزء بطابع قرآني متصل بالإطار العلوي
+    _drawQuranHeaderBox(
+      canvas: canvas,
+      rect: surahRect,
+      text: surahLabel,
+    );
+    _drawQuranHeaderBox(
+      canvas: canvas,
+      rect: juzRect,
+      text: juzLabel,
+    );
+  }
 
-    for (final c in [
-      outer.topLeft,
-      outer.topRight,
-      outer.bottomLeft,
-      outer.bottomRight
-    ]) {
-      final double dx = c.dx == outer.left ? 1.0 : -1.0;
-      final double dy = c.dy == outer.top ? 1.0 : -1.0;
-      canvas.drawLine(c, Offset(c.dx + dx * cornerLen, c.dy), cornerPaint);
-      canvas.drawLine(c, Offset(c.dx, c.dy + dy * cornerLen), cornerPaint);
-    }
+  void _drawQuranHeaderBox({
+    required Canvas canvas,
+    required Rect rect,
+    required String text,
+  }) {
+    final RRect rrect = RRect.fromRectAndRadius(rect, const Radius.circular(6));
 
-    final double midX = size.width / 2;
-    final double midY = size.height / 2;
-    const double r = 5.0;
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = paperColor
+        ..style = PaintingStyle.fill,
+    );
 
-    for (final m in [
-      Offset(midX, outer.top),
-      Offset(midX, outer.bottom),
-      Offset(outer.left, midY),
-      Offset(outer.right, midY),
-    ]) {
-      final Path d = Path()
-        ..moveTo(m.dx, m.dy - r)
-        ..lineTo(m.dx + r, m.dy)
-        ..lineTo(m.dx, m.dy + r)
-        ..lineTo(m.dx - r, m.dy)
-        ..close();
-      canvas.drawPath(d, Paint()..color = paperColor);
-      canvas.drawPath(d, outerPaint);
-    }
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = outerColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8,
+    );
+
+    canvas.drawRRect(
+      rrect.deflate(2.5),
+      Paint()
+        ..color = innerColor.withValues(alpha: 0.75)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8,
+    );
+
+    final TextPainter tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: inkColor,
+          fontSize: 12.0,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.rtl,
+      maxLines: 1,
+      ellipsis: '…',
+    )..layout(maxWidth: rect.width - 12);
+
+    tp.paint(
+      canvas,
+      Offset(
+        rect.center.dx - tp.width * 0.5,
+        rect.center.dy - tp.height * 0.5,
+      ),
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _QuranFramePainter oldDelegate) =>
+  bool shouldRepaint(covariant _ConnectedQuranFramePainter oldDelegate) =>
       oldDelegate.outerColor != outerColor ||
       oldDelegate.innerColor != innerColor ||
-      oldDelegate.paperColor != paperColor;
+      oldDelegate.paperColor != paperColor ||
+      oldDelegate.accentColor != accentColor ||
+      oldDelegate.inkColor != inkColor ||
+      oldDelegate.surahLabel != surahLabel ||
+      oldDelegate.juzLabel != juzLabel;
 }
 
-class _BottomBar extends StatelessWidget {
+class _FloatingBottomBar extends StatelessWidget {
   final PageThemePalette palette;
   final int wirdRead;
   final int wirdGoal;
@@ -1961,7 +2146,7 @@ class _BottomBar extends StatelessWidget {
   final VoidCallback onOpenScale;
   final VoidCallback onOpenTheme;
 
-  const _BottomBar({
+  const _FloatingBottomBar({
     required this.palette,
     required this.wirdRead,
     required this.wirdGoal,
@@ -1977,15 +2162,16 @@ class _BottomBar extends StatelessWidget {
     final double ratio =
         wirdGoal > 0 ? (wirdRead / wirdGoal).clamp(0.0, 1.0) : 0.0;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: palette.background,
-        border:
-            Border(top: BorderSide(color: palette.ink.withValues(alpha: 0.12))),
-      ),
-      child: SafeArea(
-        top: false,
+    return Material(
+      elevation: 6,
+      color: palette.background.withValues(alpha: 0.97),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: palette.ink.withValues(alpha: 0.14)),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
