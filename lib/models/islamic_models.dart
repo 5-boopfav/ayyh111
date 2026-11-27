@@ -143,27 +143,27 @@ class LocalIslamicRepository {
   Map<int, QuranPageData>? _cachedQuranPages;
   List<HisnCategory>? _cachedHisnCategories;
 
-  Future> loadQuranPages() async {
+  loadQuranPages() async {
     if (_cachedQuranPages != null) {
       return _cachedQuranPages!;
     }
 
     try {
-      final rawJson =
+      final String rawJson =
           await rootBundle.loadString('assets/data/quran_pages.json');
-      final decoded = jsonDecode(rawJson);
+      final dynamic decoded = jsonDecode(rawJson);
       final Map<int, List<QuranVerseItem>> groupedByPage =
           <int, List<QuranVerseItem>>{};
 
       if (decoded is List) {
         for (int i = 0; i < decoded.length; i++) {
-          final item = decoded[i];
+          final dynamic item = decoded[i];
           if (item is Map<String, dynamic>) {
-            final pageNum = _parseInt(
+            final int pageNum = _parseInt(
               item['page'] ?? item['page_number'],
               fallback: 1,
             ).clamp(1, 604);
-            final verse = QuranVerseItem.fromJson(item);
+            final QuranVerseItem verse = QuranVerseItem.fromJson(item);
             if (verse.text.isNotEmpty) {
               groupedByPage
                   .putIfAbsent(pageNum, () => <QuranVerseItem>[])
@@ -172,14 +172,14 @@ class LocalIslamicRepository {
           }
         }
       } else if (decoded is Map<String, dynamic>) {
-        final pagesNode = decoded['pages'];
+        final dynamic pagesNode = decoded['pages'];
         if (pagesNode is Map) {
           pagesNode.forEach((key, value) {
-            final pageNum = _parseInt(key, fallback: 1).clamp(1, 604);
+            final int pageNum = _parseInt(key, fallback: 1).clamp(1, 604);
             if (value is List) {
-              for (final entry in value) {
+              for (final dynamic entry in value) {
                 if (entry is Map<String, dynamic>) {
-                  final verse = QuranVerseItem.fromJson(entry);
+                  final QuranVerseItem verse = QuranVerseItem.fromJson(entry);
                   if (verse.text.isNotEmpty) {
                     groupedByPage
                         .putIfAbsent(pageNum, () => <QuranVerseItem>[])
@@ -194,7 +194,7 @@ class LocalIslamicRepository {
 
       final Map<int, QuranPageData> result = <int, QuranPageData>{};
       groupedByPage.forEach((pageNum, verses) {
-        final juzNum = (((pageNum - 1) ~/ 20) + 1).clamp(1, 30);
+        final int juzNum = (((pageNum - 1) ~/ 20) + 1).clamp(1, 30);
         result[pageNum] = QuranPageData(
           pageNumber: pageNum,
           juz: juzNum,
@@ -209,35 +209,37 @@ class LocalIslamicRepository {
     }
   }
 
-  Future<List<HisnCategory>> loadHisnAlMuslim() async {
+  loadHisnAlMuslim() async {
     if (_cachedHisnCategories != null) {
       return _cachedHisnCategories!;
     }
 
     try {
-      final rawJson =
+      final String rawJson =
           await rootBundle.loadString('assets/data/hisn_al_muslim.json');
-      final decoded = jsonDecode(rawJson);
+      final dynamic decoded = jsonDecode(rawJson);
       final List<HisnCategory> categories = <HisnCategory>[];
 
       if (decoded is List) {
         for (int i = 0; i < decoded.length; i++) {
-          final entry = decoded[i];
+          final dynamic entry = decoded[i];
           if (entry is Map<String, dynamic>) {
-            final cat = HisnCategory.fromJson(entry, fallbackId: i + 1);
+            final HisnCategory cat =
+                HisnCategory.fromJson(entry, fallbackId: i + 1);
             if (cat.items.isNotEmpty) {
               categories.add(cat);
             }
           }
         }
       } else if (decoded is Map<String, dynamic>) {
-        final listNode =
+        final dynamic listNode =
             decoded['categories'] ?? decoded['data'] ?? decoded['hisn'];
         if (listNode is List) {
           for (int i = 0; i < listNode.length; i++) {
-            final entry = listNode[i];
+            final dynamic entry = listNode[i];
             if (entry is Map<String, dynamic>) {
-              final cat = HisnCategory.fromJson(entry, fallbackId: i + 1);
+              final HisnCategory cat =
+                  HisnCategory.fromJson(entry, fallbackId: i + 1);
               if (cat.items.isNotEmpty) {
                 categories.add(cat);
               }
