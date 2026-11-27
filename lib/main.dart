@@ -204,7 +204,7 @@ const List<JuzInfo> kJuzList = [
 ];
 
 // ============================================================================
-// الشاشة الرئيسية لقراءة المصحف (تحكم لحظي مباشر وعطف ورق واقعي)
+// الشاشة الرئيسية لقراءة المصحف (استجابة مباشرة وتبسيط واضح للانثناء)
 // ============================================================================
 
 class MushafReaderScreen extends StatefulWidget {
@@ -226,28 +226,32 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   bool _nightMode = false;
   double _pageScale = 1.0;
 
-  // إحداثيات التحكم المباشر بإصبع المستخدم
-  double _dragStartX = 0.0;
+  // تتبع مباشر وسريع لإصبع المستخدم
+  int? _activePointer;
+  double _startX = 0.0;
+  double _lastX = 0.0;
+  int _lastTimeMs = 0;
+  double _vx = 0.0;
   double _pointerDyRatio = 0.5;
 
-  // -1 للانتقال إلى الصفحة التالية (سحب لليسار)، +1 للرجوع للسابقة (سحب لليمين)
+  // -1 للانتقال للصفحة التالية (سحب لليسار)، +1 للرجوع للسابقة (سحب لليمين)
   int _dragDirection = 0;
   double _dragProgress = 0.0;
-  bool _isAnimatingSettle = false;
-  bool _commitTargetReached = false;
+  bool _isSettling = false;
+  bool _willCommit = false;
 
   late final AnimationController _settleController;
-  Animation<double>? _settleAnimation;
+  Animation<double>? _settleAnim;
 
   @override
   void initState() {
     super.initState();
     _settleController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 220),
+      duration: const Duration(milliseconds: 210),
     )
       ..addListener(_onSettleTick)
-      ..addStatusListener(_onSettleStatus);
+      ..addStatusListener(_onSettleDone);
 
     _loadSavedState();
   }
@@ -295,19 +299,19 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   }
 
   void _onSettleTick() {
-    if (_settleAnimation == null) return;
+    if (_settleAnim == null) return;
     setState(() {
-      _dragProgress = _settleAnimation!.value.clamp(0.0, 1.0);
+      _dragProgress = _settleAnim!.value.clamp(0.0, 1.0);
     });
   }
 
-  void _onSettleStatus(AnimationStatus status) {
+  void _onSettleDone(AnimationStatus status) {
     if (status == AnimationStatus.completed) {
       final int dir = _dragDirection;
-      final bool committed = _commitTargetReached;
+      final bool commit = _willCommit;
 
       setState(() {
-        if (committed && dir != 0) {
+        if (commit && dir != 0) {
           final int nextPage = (_currentPage - dir).clamp(1, totalPages);
           if (nextPage != _currentPage) {
             _currentPage = nextPage;
@@ -316,8 +320,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
         }
         _dragDirection = 0;
         _dragProgress = 0.0;
-        _isAnimatingSettle = false;
-        _commitTargetReached = false;
+        _isSettling = false;
+        _willCommit = false;
       });
       _persistPreferences();
     }
@@ -340,10 +344,11 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       _settleController.stop();
     }
     setState(() {
+      _activePointer = null;
       _dragDirection = 0;
       _dragProgress = 0.0;
-      _isAnimatingSettle = false;
-      _commitTargetReached = false;
+      _isSettling = false;
+      _willCommit = false;
       _currentPage = target;
     });
     _persistPreferences();
@@ -360,79 +365,82 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     _persistPreferences();
   }
 
-  void _beginDragAt(Offset localPos, double height) {
-    if (_isAnimatingSettle) return;
+  void _handlePointerDown(PointerDownEvent event, double height) {
+    if (_isSettling) return;
     if (_settleController.isAnimating) {
       _settleController.stop();
     }
     setState(() {
-      _dragStartX = localPos.dx;
+      _activePointer = event.pointer;
+      _startX = event.localPosition.dx;
+      _lastX = event.localPosition.dx;
+      _lastTimeMs = DateTime.now().millisecondsSinceEpoch;
+      _vx = 0.0;
       _pointerDyRatio =
-          height > 0 ? (localPos.dy / height).clamp(0.05, 0.95) : 0.5;
+          height > 0 ? (event.localPosition.dy / height).clamp(0.05, 0.95) : 0.5;
       _dragDirection = 0;
       _dragProgress = 0.0;
     });
   }
 
-  void _updateDragAt(Offset localPos, double width, double height) {
-    if (_isAnimatingSettle || width <= 0) return;
+  void _handlePointerMove(PointerMoveEvent event, double width, double height) {
+    if (_isSettling || width <= 0) return;
+    if (_activePointer != null && event.pointer != _activePointer) return;
 
-    final double totalDx = localPos.dx - _dragStartX;
+    final int nowMs = DateTime.now().millisecondsSinceEpoch;
+    final int dt = nowMs - _lastTimeMs;
+    if (dt > 0) {
+      _vx = ((event.localPosition.dx - _lastX) * 1000.0) / dt;
+    }
+    _lastX = event.localPosition.dx;
+    _lastTimeMs = nowMs;
+
+    final double dx = event.localPosition.dx - _startX;
     final double dyRatio =
-        height > 0 ? (localPos.dy / height).clamp(0.05, 0.95) : 0.5;
+        height > 0 ? (event.localPosition.dy / height).clamp(0.05, 0.95) : 0.5;
 
-    int activeDir = _dragDirection;
-    if (activeDir == 0 && totalDx.abs() > 2.0) {
-      final int candidateDir = totalDx < 0 ? -1 : 1;
-      final int targetPage = _currentPage - candidateDir;
-      if (targetPage >= 1 && targetPage <= totalPages) {
-        activeDir = candidateDir;
+    int dir = _dragDirection;
+    if (dir == 0 && dx.abs() > 0.5) {
+      final int candidate = dx < 0 ? -1 : 1;
+      final int target = _currentPage - candidate;
+      if (target >= 1 && target <= totalPages) {
+        dir = candidate;
       }
     }
 
-    if (activeDir == 0) {
+    if (dir == 0) {
       setState(() {
         _pointerDyRatio = dyRatio;
       });
       return;
     }
 
-    // تحكم مباشر لحظي: تتبع حركة الإصبع فوراً وتبقى معلّقة عند التوقف
-    final double progress = ((-totalDx * activeDir) / (width * 0.72))
-        .clamp(0.0, 1.0);
+    // استجابة مباشرة ولحظية: أي تحريك يغيّر الانثناء فوراً ويبقى عند التوقف
+    final double raw = ((-dx * dir) / (width * 0.65)).clamp(0.0, 1.0);
+    final double progress = raw < 0.02 ? 0.02 : raw;
+
     setState(() {
-      _dragDirection = activeDir;
+      _dragDirection = dir;
       _pointerDyRatio = dyRatio;
       _dragProgress = progress;
     });
   }
 
-  void _endDragWithVelocity(double vx) {
-    if (_isAnimatingSettle) return;
+  void _handlePointerUpOrCancel(int pointer) {
+    if (_activePointer != null && pointer != _activePointer) return;
+    _activePointer = null;
 
-    if (_dragDirection == 0) {
-      if (vx.abs() > 350) {
-        final int candidateDir = vx < 0 ? -1 : 1;
-        final int targetPage = _currentPage - candidateDir;
-        if (targetPage >= 1 && targetPage <= totalPages) {
-          _dragDirection = candidateDir;
-          _dragProgress = 0.25;
-          _startSettleTo(true);
-        }
-      }
-      return;
-    }
+    if (_isSettling || _dragDirection == 0) return;
 
-    final double directionalVelocity = -vx * _dragDirection;
-    final bool shouldCommit =
-        _dragProgress >= 0.38 || directionalVelocity > 480;
-    _startSettleTo(shouldCommit);
+    final double dirVel = -_vx * _dragDirection;
+    final bool commit = _dragProgress >= 0.35 || dirVel > 380;
+    _animateSettle(commit);
   }
 
-  void _startSettleTo(bool commit) {
-    _commitTargetReached = commit;
-    _isAnimatingSettle = true;
-    _settleAnimation = Tween<double>(
+  void _animateSettle(bool commit) {
+    _willCommit = commit;
+    _isSettling = true;
+    _settleAnim = Tween<double>(
       begin: _dragProgress,
       end: commit ? 1.0 : 0.0,
     ).animate(
@@ -477,10 +485,10 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     final Color accentColor =
         _nightMode ? const Color(0xFFD4AF37) : const Color(0xFF8C6223);
 
-    final bool hasActiveCurl = _dragDirection != 0 && _dragProgress > 0.001;
-    final int? targetPageNumber = hasActiveCurl
+    final bool activeCurl = _dragDirection != 0 && _dragProgress > 0.0;
+    final int underPageNumber = activeCurl
         ? (_currentPage - _dragDirection).clamp(1, totalPages)
-        : null;
+        : _currentPage;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -548,42 +556,32 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                 final double width = constraints.maxWidth;
                 final double height = constraints.maxHeight;
 
-                return GestureDetector(
+                return Listener(
                   behavior: HitTestBehavior.translucent,
-                  onHorizontalDragStart: (d) =>
-                      _beginDragAt(d.localPosition, height),
-                  onHorizontalDragUpdate: (d) =>
-                      _updateDragAt(d.localPosition, width, height),
-                  onHorizontalDragEnd: (d) =>
-                      _endDragWithVelocity(d.primaryVelocity ?? 0.0),
-                  onVerticalDragUpdate: (d) {
-                    if (_dragDirection != 0 && !_isAnimatingSettle && height > 0) {
-                      setState(() {
-                        _pointerDyRatio =
-                            (d.localPosition.dy / height).clamp(0.05, 0.95);
-                      });
-                    }
-                  },
+                  onPointerDown: (e) => _handlePointerDown(e, height),
+                  onPointerMove: (e) => _handlePointerMove(e, width, height),
+                  onPointerUp: (e) => _handlePointerUpOrCancel(e.pointer),
+                  onPointerCancel: (e) => _handlePointerUpOrCancel(e.pointer),
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
                       // الصفحة الثابتة تحت الورقة المنثنية وتتكشف تدريجياً
-                      if (targetPageNumber != null)
+                      if (activeCurl)
                         _buildStaticUnderPage(
-                          pageNumber: targetPageNumber,
+                          pageNumber: underPageNumber,
                           nightMode: _nightMode,
                           scale: _pageScale,
                           progress: _dragProgress,
                         ),
 
-                      // الورقة المنثنية نفسها (عطف مائل + تقوّس + ظل + ظهر الورقة)
-                      _buildCurledSingleSheet(
+                      // الورقة المنثنية نفسها (عطف مائل + تقوّس + ظل + ظهر الورقة معكوس)
+                      _buildCurledSheet(
                         currentPage: _currentPage,
-                        backPage: targetPageNumber ?? _currentPage,
+                        backPage: underPageNumber,
                         width: width,
                         height: height,
-                        dragDirection: _dragDirection,
-                        progress: hasActiveCurl ? _dragProgress : 0.0,
+                        dragDirection: activeCurl ? _dragDirection : 0,
+                        progress: activeCurl ? _dragProgress : 0.0,
                         pointerDyRatio: _pointerDyRatio,
                         nightMode: _nightMode,
                         scale: _pageScale,
@@ -606,7 +604,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     required double scale,
     required double progress,
   }) {
-    final double underShadowAlpha = (0.18 * (1.0 - progress)).clamp(0.0, 0.22);
+    final double shadowAlpha = (0.18 * (1.0 - progress)).clamp(0.0, 0.22);
 
     return Stack(
       fit: StackFit.expand,
@@ -618,14 +616,14 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
         ),
         IgnorePointer(
           child: Container(
-            color: Colors.black.withValues(alpha: underShadowAlpha),
+            color: Colors.black.withValues(alpha: shadowAlpha),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildCurledSingleSheet({
+  Widget _buildCurledSheet({
     required int currentPage,
     required int backPage,
     required double width,
