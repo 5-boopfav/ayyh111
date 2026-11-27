@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -220,16 +221,18 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   bool _nightMode = false;
   double _pageScale = 1.0;
 
-  // تتبع اللمس من الحافة اليسرى (للتالي) أو الحافة اليمنى (للسابق)
-  int? _pointerId;
+  // تتبع اللمس المباشر من الحافتين ومنع تعدد عمليات التقليب في وقت واحد
+  int? _activePointerId;
   double _startX = 0.0;
+  double _startY = 0.0;
   double _lastX = 0.0;
   int _lastTimeMs = 0;
   double _vx = 0.0;
   double _dyRatio = 0.5;
+  double _touchXRatio = 0.5;
 
-  // -1 للانتقال للصفحة التالية (يمسك من الحافة اليسرى ويسحب يميناً)
-  // +1 للرجوع للصفحة السابقة (يمسك من الحافة اليمنى ويسحب يساراً)
+  // -1 للانتقال للصفحة التالية (مسك من اليسار وسحب يميناً)
+  // +1 للرجوع للصفحة السابقة (مسك من اليمين وسحب يساراً)
   int _dragDir = 0;
   double _progress = 0.0;
   bool _settling = false;
@@ -238,12 +241,16 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   late final AnimationController _settleCtrl;
   Animation<double>? _settleAnim;
 
+  // ذاكرة تخزين مؤقت لصور الصفحات لتفادي إعادة التحميل أثناء السحب
+  final Map<int, ImageProvider> _imageCache = {};
+  int _lastPrecachedPage = -1;
+
   @override
   void initState() {
     super.initState();
     _settleCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 240),
     )
       ..addListener(() {
         if (_settleAnim != null) {
@@ -258,24 +265,55 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
           final bool didCommit = _commit;
           setState(() {
             if (didCommit && finishedDir != 0) {
-              // finishedDir == -1 -> next page (_currentPage + 1)
-              // finishedDir == +1 -> previous page (_currentPage - 1)
-              final int nextPage = (_currentPage - finishedDir).clamp(1, totalPages);
+              final int nextPage =
+                  (_currentPage - finishedDir).clamp(1, totalPages);
               if (nextPage != _currentPage) {
                 _currentPage = nextPage;
                 _advanceWirdOnce();
               }
             }
+            _activePointerId = null;
             _dragDir = 0;
             _progress = 0.0;
             _settling = false;
             _commit = false;
           });
           _saveState();
+          _precacheNeighbors();
         }
       });
 
     _loadState();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _precacheNeighbors();
+  }
+
+  ImageProvider _providerForPage(int page) {
+    final int clamped = page.clamp(1, totalPages);
+    return _imageCache.putIfAbsent(
+      clamped,
+      () => AssetImage('assets/images/quran/$clamped.png'),
+    );
+  }
+
+  void _precacheNeighbors() {
+    if (!mounted || _lastPrecachedPage == _currentPage) return;
+    _lastPrecachedPage = _currentPage;
+    final candidates = [
+      _currentPage - 1,
+      _currentPage,
+      _currentPage + 1,
+      _currentPage + 2,
+    ];
+    for (final p in candidates) {
+      if (p >= 1 && p <= totalPages) {
+        precacheImage(_providerForPage(p), context).catchError((_) {});
+      }
+    }
   }
 
   Future<void> _loadState() async {
@@ -295,6 +333,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       _lastWirdDate = today;
       _wirdReadToday = savedWird;
     });
+    _precacheNeighbors();
   }
 
   String _todayKey() {
@@ -329,11 +368,12 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   }
 
   void _jumpToPage(int page) {
+    if (_settling) return;
     if (_settleCtrl.isAnimating) {
       _settleCtrl.stop();
     }
     setState(() {
-      _pointerId = null;
+      _activePointerId = null;
       _dragDir = 0;
       _progress = 0.0;
       _settling = false;
@@ -341,6 +381,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       _currentPage = page.clamp(1, totalPages);
     });
     _saveState();
+    _precacheNeighbors();
   }
 
   void _toggleBookmark() {
@@ -351,13 +392,12 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   }
 
   void _handlePointerDown(PointerDownEvent event, double width, double height) {
-    if (_settling || width <= 0) return;
-    if (_settleCtrl.isAnimating) {
-      _settleCtrl.stop();
-    }
+    // منع تنفيذ أكثر من عملية تقليب في الوقت نفسه
+    if (_settling || _activePointerId != null || width <= 0) return;
 
     final double x = event.localPosition.dx;
-    final double edgeZone = width * 0.28;
+    final double y = event.localPosition.dy;
+    final double edgeZone = width * 0.30;
 
     int initialDir = 0;
     if (x <= edgeZone && _currentPage < totalPages) {
@@ -369,13 +409,14 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     }
 
     setState(() {
-      _pointerId = event.pointer;
+      _activePointerId = event.pointer;
       _startX = x;
+      _startY = y;
       _lastX = x;
       _lastTimeMs = DateTime.now().millisecondsSinceEpoch;
       _vx = 0.0;
-      _dyRatio =
-          height > 0 ? (event.localPosition.dy / height).clamp(0.08, 0.92) : 0.5;
+      _dyRatio = height > 0 ? (y / height).clamp(0.06, 0.94) : 0.5;
+      _touchXRatio = (x / width).clamp(0.0, 1.0);
       _dragDir = initialDir;
       _progress = 0.0;
     });
@@ -383,7 +424,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
 
   void _handlePointerMove(PointerMoveEvent event, double width, double height) {
     if (_settling || width <= 0) return;
-    if (_pointerId != null && event.pointer != _pointerId) return;
+    if (_activePointerId == null || event.pointer != _activePointerId) return;
 
     final int now = DateTime.now().millisecondsSinceEpoch;
     final int dt = now - _lastTimeMs;
@@ -393,33 +434,44 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     _lastX = event.localPosition.dx;
     _lastTimeMs = now;
 
-    final double ratioY =
-        height > 0 ? (event.localPosition.dy / height).clamp(0.08, 0.92) : 0.5;
+    final double x = event.localPosition.dx;
+    final double y = event.localPosition.dy;
+    final double ratioY = height > 0 ? (y / height).clamp(0.06, 0.94) : 0.5;
+    final double ratioX = (x / width).clamp(0.0, 1.0);
 
     if (_dragDir == 0) {
-      setState(() => _dyRatio = ratioY);
+      setState(() {
+        _dyRatio = ratioY;
+        _touchXRatio = ratioX;
+      });
       return;
     }
 
-    // عند المسك من الحافة اليسرى (_dragDir == -1): السحب لليمين (dx > 0) يزيد التقدم
-    // عند المسك من الحافة اليمنى (_dragDir == +1): السحب لليسار (dx < 0) يزيد التقدم
-    final double dx = event.localPosition.dx - _startX;
+    final double dx = x - _startX;
     final double signedTravel = _dragDir < 0 ? dx : -dx;
-    final double raw = (signedTravel / (width * 0.42)).clamp(0.0, 1.0);
+    final double raw = (signedTravel / (width * 0.44)).clamp(0.0, 1.0);
 
     setState(() {
       _dyRatio = ratioY;
+      _touchXRatio = ratioX;
       _progress = raw;
     });
   }
 
   void _handlePointerEnd(int pointer) {
-    if (_pointerId != null && pointer != _pointerId) return;
-    _pointerId = null;
-    if (_settling || _dragDir == 0) return;
+    if (_activePointerId == null || pointer != _activePointerId) return;
+    if (_settling) return;
+
+    if (_dragDir == 0) {
+      setState(() {
+        _activePointerId = null;
+        _progress = 0.0;
+      });
+      return;
+    }
 
     final double directionalSpeed = _dragDir < 0 ? _vx : -_vx;
-    final bool shouldCommit = _progress >= 0.28 || directionalSpeed > 240;
+    final bool shouldCommit = _progress >= 0.32 || directionalSpeed > 260;
     _runSettle(shouldCommit);
   }
 
@@ -468,9 +520,9 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     final Color accentColor =
         _nightMode ? const Color(0xFFD4AF37) : const Color(0xFF8C6223);
 
-    final bool activeFold = _dragDir != 0 && _progress > 0.001;
+    final bool isTurning = _dragDir != 0 && _progress > 0.001;
     final int underPage =
-        activeFold ? (_currentPage - _dragDir).clamp(1, totalPages) : _currentPage;
+        isTurning ? (_currentPage - _dragDir).clamp(1, totalPages) : _currentPage;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -547,24 +599,28 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      // 1. الصفحة الثابتة تحت الورقة المطوية
-                      if (activeFold)
-                        _UnderPageLayer(
+                      // الصفحة التالية أسفل الورقة المنثنية مع ظل ناعم يرتفع تدريجياً
+                      if (isTurning)
+                        _NextPageUnderlay(
+                          imageProvider: _providerForPage(underPage),
                           pageNumber: underPage,
                           nightMode: _nightMode,
                           scale: _pageScale,
                           progress: _progress,
                         ),
 
-                      // 2. الورقة المطوية من الحافة مع ثنية مائلة وتقوّس وظل وظهر معكوس
-                      _EdgeFoldedSheet(
+                      // محرك التقليب القطري المنحني للورقة مع الإضاءة والظلال والوجه الخلفي
+                      _RealisticPaperCurlEngine(
+                        currentProvider: _providerForPage(_currentPage),
+                        backProvider: _providerForPage(underPage),
                         currentPage: _currentPage,
                         backPage: underPage,
                         width: width,
                         height: height,
-                        direction: activeFold ? _dragDir : 0,
-                        progress: activeFold ? _progress : 0.0,
+                        direction: isTurning ? _dragDir : 0,
+                        progress: isTurning ? _progress : 0.0,
                         dyRatio: _dyRatio,
+                        touchXRatio: _touchXRatio,
                         nightMode: _nightMode,
                         scale: _pageScale,
                       ),
@@ -596,7 +652,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       backgroundColor:
           _nightMode ? const Color(0xFF1A1D22) : const Color(0xFFFAF5EA),
       builder: (ctx) {
-        final fg = _nightMode ? const Color(0xFFE7DFC8) : const Color(0xFF231F1A);
+        final fg =
+            _nightMode ? const Color(0xFFE7DFC8) : const Color(0xFF231F1A);
         return Directionality(
           textDirection: TextDirection.rtl,
           child: Column(
@@ -605,7 +662,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                 padding: const EdgeInsets.all(14),
                 child: Text(
                   'فهرس السور',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: fg),
+                  style: TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.bold, color: fg),
                 ),
               ),
               Expanded(
@@ -618,11 +676,16 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: fg.withValues(alpha: 0.12),
-                        child: Text('${s.number}', style: TextStyle(color: fg, fontSize: 13)),
+                        child: Text('${s.number}',
+                            style: TextStyle(color: fg, fontSize: 13)),
                       ),
-                      title: Text(s.name, style: TextStyle(color: fg, fontWeight: FontWeight.w600)),
-                      subtitle: Text(s.revelationType, style: TextStyle(color: fg.withValues(alpha: 0.65))),
-                      trailing: Text('ص ${s.startPage}', style: TextStyle(color: fg.withValues(alpha: 0.8))),
+                      title: Text(s.name,
+                          style:
+                              TextStyle(color: fg, fontWeight: FontWeight.w600)),
+                      subtitle: Text(s.revelationType,
+                          style: TextStyle(color: fg.withValues(alpha: 0.65))),
+                      trailing: Text('ص ${s.startPage}',
+                          style: TextStyle(color: fg.withValues(alpha: 0.8))),
                       onTap: () {
                         Navigator.pop(ctx);
                         _jumpToPage(s.startPage);
@@ -644,7 +707,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       backgroundColor:
           _nightMode ? const Color(0xFF1A1D22) : const Color(0xFFFAF5EA),
       builder: (ctx) {
-        final fg = _nightMode ? const Color(0xFFE7DFC8) : const Color(0xFF231F1A);
+        final fg =
+            _nightMode ? const Color(0xFFE7DFC8) : const Color(0xFF231F1A);
         return Directionality(
           textDirection: TextDirection.rtl,
           child: Column(
@@ -653,7 +717,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                 padding: const EdgeInsets.all(14),
                 child: Text(
                   'أجزاء المصحف الثلاثون',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: fg),
+                  style: TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.bold, color: fg),
                 ),
               ),
               Expanded(
@@ -666,10 +731,14 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: fg.withValues(alpha: 0.12),
-                        child: Text('${j.number}', style: TextStyle(color: fg, fontSize: 13)),
+                        child: Text('${j.number}',
+                            style: TextStyle(color: fg, fontSize: 13)),
                       ),
-                      title: Text(j.title, style: TextStyle(color: fg, fontWeight: FontWeight.w600)),
-                      trailing: Text('تبدأ من ص ${j.startPage}', style: TextStyle(color: fg.withValues(alpha: 0.8))),
+                      title: Text(j.title,
+                          style:
+                              TextStyle(color: fg, fontWeight: FontWeight.w600)),
+                      trailing: Text('تبدأ من ص ${j.startPage}',
+                          style: TextStyle(color: fg.withValues(alpha: 0.8))),
                       onTap: () {
                         Navigator.pop(ctx);
                         _jumpToPage(j.startPage);
@@ -708,7 +777,9 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
               ],
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('إلغاء')),
               FilledButton(
                 onPressed: () {
                   setState(() {
@@ -736,7 +807,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       backgroundColor:
           _nightMode ? const Color(0xFF1A1D22) : const Color(0xFFFAF5EA),
       builder: (ctx) {
-        final fg = _nightMode ? const Color(0xFFE7DFC8) : const Color(0xFF231F1A);
+        final fg =
+            _nightMode ? const Color(0xFFE7DFC8) : const Color(0xFF231F1A);
         return Directionality(
           textDirection: TextDirection.rtl,
           child: StatefulBuilder(
@@ -747,7 +819,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                 children: [
                   Text(
                     'حجم عرض الصفحة: ${(tempScale * 100).round()}%',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: fg),
+                    style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold, color: fg),
                   ),
                   Slider(
                     min: 0.9,
@@ -785,13 +858,15 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   }
 }
 
-class _UnderPageLayer extends StatelessWidget {
+class _NextPageUnderlay extends StatelessWidget {
+  final ImageProvider imageProvider;
   final int pageNumber;
   final bool nightMode;
   final double scale;
   final double progress;
 
-  const _UnderPageLayer({
+  const _NextPageUnderlay({
+    required this.imageProvider,
     required this.pageNumber,
     required this.nightMode,
     required this.scale,
@@ -800,18 +875,31 @@ class _UnderPageLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double shade = (0.16 * (1.0 - progress)).clamp(0.0, 0.20);
+    final double dim = (0.14 * (1.0 - progress)).clamp(0.0, 0.16);
     return Stack(
       fit: StackFit.expand,
       children: [
-        MushafSingleSheet(pageNumber: pageNumber, nightMode: nightMode, scale: scale),
-        IgnorePointer(child: Container(color: Colors.black.withValues(alpha: shade))),
+        RepaintBoundary(
+          child: MushafSingleSheet(
+            imageProvider: imageProvider,
+            pageNumber: pageNumber,
+            nightMode: nightMode,
+            scale: scale,
+          ),
+        ),
+        IgnorePointer(
+          child: ColoredBox(
+            color: Colors.black.withValues(alpha: dim),
+          ),
+        ),
       ],
     );
   }
 }
 
-class _EdgeFoldedSheet extends StatelessWidget {
+class _RealisticPaperCurlEngine extends StatelessWidget {
+  final ImageProvider currentProvider;
+  final ImageProvider backProvider;
   final int currentPage;
   final int backPage;
   final double width;
@@ -819,10 +907,13 @@ class _EdgeFoldedSheet extends StatelessWidget {
   final int direction;
   final double progress;
   final double dyRatio;
+  final double touchXRatio;
   final bool nightMode;
   final double scale;
 
-  const _EdgeFoldedSheet({
+  const _RealisticPaperCurlEngine({
+    required this.currentProvider,
+    required this.backProvider,
     required this.currentPage,
     required this.backPage,
     required this.width,
@@ -830,116 +921,116 @@ class _EdgeFoldedSheet extends StatelessWidget {
     required this.direction,
     required this.progress,
     required this.dyRatio,
+    required this.touchXRatio,
     required this.nightMode,
     required this.scale,
   });
 
-  Matrix4 _buildFlapMatrix() {
-    final Matrix4 m = Matrix4.identity()..setEntry(3, 2, 0.0012);
-    final double yaw = -direction * (math.pi * 0.36 * progress);
-    final double pitch = (dyRatio - 0.5) * 0.16 * progress;
-    m.rotateY(yaw);
-    m.rotateX(pitch);
-    return m;
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (direction == 0 || progress <= 0.0) {
-      return MushafSingleSheet(
-        pageNumber: currentPage,
-        nightMode: nightMode,
-        scale: scale,
+    if (direction == 0 || progress <= 0.0 || width <= 0 || height <= 0) {
+      return RepaintBoundary(
+        child: MushafSingleSheet(
+          imageProvider: currentProvider,
+          pageNumber: currentPage,
+          nightMode: nightMode,
+          scale: scale,
+        ),
       );
     }
 
-    final _FoldGeometry spec = _FoldGeometry.fromTouch(
+    final _CurlMeshModel model = _CurlMeshModel.solve(
       size: Size(width, height),
       direction: direction,
       progress: progress,
       dyRatio: dyRatio,
+      touchXRatio: touchXRatio,
     );
 
-    // عند السحب من الحافة اليسرى (direction == -1): الورقة تنزاح نحو اليمين
-    // عند السحب من الحافة اليمنى (direction == +1): الورقة تنزاح نحو اليسار
-    final double shiftX = -direction * width * 0.34 * progress;
-    final Alignment flapOrigin =
-        direction < 0 ? Alignment.centerLeft : Alignment.centerRight;
+    // ميل ثلاثي الأبعاد خفيف للجزء المنثني يعزز عمق الورقة مع الانحناء القطري
+    final double liftAngleY = -direction * (0.28 * math.sin(progress * math.pi * 0.65));
+    final double tiltAngleX = (dyRatio - 0.5) * 0.14 * progress;
+    final Matrix4 backPerspective = Matrix4.identity()
+      ..setEntry(3, 2, 0.0012)
+      ..rotateY(liftAngleY)
+      ..rotateX(tiltAngleX);
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        // ظل خط الثنية على الصفحة الثابتة تحت الورقة
+        // 1. ظل ناعم ومتدرج على الصفحة التالية أسفل منطقة الانحناء والرفع
         IgnorePointer(
           child: CustomPaint(
             size: Size(width, height),
-            painter: _CreaseShadowPainter(
-              spec: spec,
-              shiftX: shiftX,
-              progress: progress,
+            painter: _UnderPageCastShadowPainter(
+              model: model,
               nightMode: nightMode,
             ),
           ),
         ),
 
-        // الجزء غير المنعطف من الورقة الحالية
-        Transform.translate(
-          offset: Offset(shiftX, 0),
-          child: ClipPath(
-            clipper: _UnfoldedBodyClipper(spec: spec),
-            child: MushafSingleSheet(
-              pageNumber: currentPage,
-              nightMode: nightMode,
-              scale: scale,
-            ),
+        // 2. الجزء الثابت/المنتقل من الورقة الحالية مع انحناء قطري وإضاءة سطحية
+        ClipPath(
+          clipper: _FrontBodyClipper(model: model),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              RepaintBoundary(
+                child: MushafSingleSheet(
+                  imageProvider: currentProvider,
+                  pageNumber: currentPage,
+                  nightMode: nightMode,
+                  scale: scale,
+                ),
+              ),
+              IgnorePointer(
+                child: CustomPaint(
+                  size: Size(width, height),
+                  painter: _FrontSurfaceLightingPainter(
+                    model: model,
+                    nightMode: nightMode,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
 
-        // ظهر الجزء المنعطف: يعرض الصفحة التالية معكوسة مع عمق Matrix4 وتظليل الثنية
-        Transform.translate(
-          offset: Offset(shiftX, 0),
-          child: ClipPath(
-            clipper: _FoldedFlapClipper(spec: spec),
-            child: Transform(
-              alignment: flapOrigin,
-              transform: _buildFlapMatrix(),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Transform(
-                    alignment: Alignment.center,
-                    transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
-                    child: Opacity(
-                      opacity: nightMode ? 0.45 : 0.58,
+        // 3. الوجه الخلفي للورقة المنثنية: انعكاس أفقي + انحناء قطري + إضاءة وظلال التجعد
+        ClipPath(
+          clipper: _CurledBackClipper(model: model),
+          child: Transform(
+            alignment:
+                direction < 0 ? Alignment.centerLeft : Alignment.centerRight,
+            transform: backPerspective,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Transform(
+                  alignment: Alignment.center,
+                  transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
+                  child: Opacity(
+                    opacity: nightMode ? 0.36 : 0.48,
+                    child: RepaintBoundary(
                       child: MushafSingleSheet(
+                        imageProvider: backProvider,
                         pageNumber: backPage,
                         nightMode: nightMode,
                         scale: scale,
                       ),
                     ),
                   ),
-                  IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: (nightMode
-                                ? const Color(0xFF1A1E24)
-                                : const Color(0xFFF3EAD8))
-                            .withValues(alpha: nightMode ? 0.48 : 0.40),
-                      ),
+                ),
+                IgnorePointer(
+                  child: CustomPaint(
+                    size: Size(width, height),
+                    painter: _BackFaceShadingPainter(
+                      model: model,
+                      nightMode: nightMode,
                     ),
                   ),
-                  IgnorePointer(
-                    child: CustomPaint(
-                      size: Size(width, height),
-                      painter: _FlapCreasePainter(
-                        spec: spec,
-                        progress: progress,
-                        nightMode: nightMode,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -948,113 +1039,167 @@ class _EdgeFoldedSheet extends StatelessWidget {
   }
 }
 
-class _FoldGeometry {
+class _CurlMeshModel {
   final Size size;
-  final int direction;
-  final double progress;
-  final double topX;
-  final double bottomX;
-  final double bowX;
-  final double focusY;
-  final double flapWidth;
+  final int direction; // -1: مسك من اليسار وسحب لليمين | +1: مسك من اليمين وسحب لليسار
+  final double progress; // 0.0 .. 1.0
+  final double dyRatio; // 0.06 .. 0.94
+  final double touchXRatio;
 
-  const _FoldGeometry({
+  // نقاط خط الثنية القطري المنحني
+  final Offset creaseTop;
+  final Offset creaseMid;
+  final Offset creaseBottom;
+
+  // نقاط الحافة الخارجية الملتفة للورقة
+  final Offset edgeTop;
+  final Offset edgeMid;
+  final Offset edgeBottom;
+
+  // مقدار التقوّس والالتفاف
+  final double curlDepth;
+  final double bowMagnitude;
+
+  const _CurlMeshModel({
     required this.size,
     required this.direction,
     required this.progress,
-    required this.topX,
-    required this.bottomX,
-    required this.bowX,
-    required this.focusY,
-    required this.flapWidth,
+    required this.dyRatio,
+    required this.touchXRatio,
+    required this.creaseTop,
+    required this.creaseMid,
+    required this.creaseBottom,
+    required this.edgeTop,
+    required this.edgeMid,
+    required this.edgeBottom,
+    required this.curlDepth,
+    required this.bowMagnitude,
   });
 
-  factory _FoldGeometry.fromTouch({
+  factory _CurlMeshModel.solve({
     required Size size,
     required int direction,
     required double progress,
     required double dyRatio,
+    required double touchXRatio,
   }) {
     final double w = size.width;
     final double h = size.height;
-    final double biasY = (dyRatio - 0.5) * 2.0;
-    final double slant = biasY * w * 0.17 * progress;
-    final double bow = w * 0.085 * (progress * (1.0 - progress * 0.35));
-    final double fy = (h * dyRatio).clamp(h * 0.1, h * 0.9);
-    final double flap = (w * (0.15 + 0.22 * progress)).clamp(20.0, w * 0.42);
+    final double p = progress.clamp(0.0, 1.0);
+
+    // ميل قطري طبيعي بحسب موضع الإصبع رأسياً وأفقياً
+    final double verticalBias = (dyRatio - 0.5) * 2.0; // -1 أعلى .. +1 أسفل
+    final double horizontalBias = (touchXRatio - 0.5).abs();
+    final double diagonalSkew =
+        verticalBias * w * (0.24 + 0.08 * horizontalBias) * p;
+
+    // تقوّس منحني للورقة يبلغ ذروته في منتصف التقليب ويستقر عند النهاية
+    final double archFactor = math.sin(p * math.pi * 0.82);
+    final double bow = w * 0.11 * archFactor;
+
+    // عمق الجزء المنثني (الورقة المرفوعة والمطوية)
+    final double flapDepth =
+        (w * (0.14 + 0.34 * math.pow(p, 0.85))).clamp(18.0, w * 0.52);
+
+    final double fy = (h * dyRatio).clamp(h * 0.08, h * 0.92);
 
     if (direction < 0) {
-      // مسك من الحافة اليسرى وسحب يميناً: خط الثنية يتقدم من اليسار نحو اليمين
-      final double base = w * (progress * 0.72);
-      return _FoldGeometry(
+      // مسك من الحافة اليسرى وسحب يميناً: خط الثنية يتحرك من اليسار نحو اليمين
+      final double baseX = w * (0.04 + 0.88 * p);
+      final double topX = (baseX - diagonalSkew).clamp(0.0, w);
+      final double botX = (baseX + diagonalSkew).clamp(0.0, w);
+      final double midX = ((topX + botX) * 0.5 + bow).clamp(0.0, w);
+
+      final double eTopX = (topX - flapDepth).clamp(-w * 0.12, w);
+      final double eBotX = (botX - flapDepth).clamp(-w * 0.12, w);
+      final double eMidX =
+          ((eTopX + eBotX) * 0.5 + bow * 1.35).clamp(-w * 0.12, w);
+
+      return _CurlMeshModel(
         size: size,
         direction: direction,
-        progress: progress,
-        topX: (base - slant).clamp(0.0, w),
-        bottomX: (base + slant).clamp(0.0, w),
-        bowX: bow,
-        focusY: fy,
-        flapWidth: flap,
+        progress: p,
+        dyRatio: dyRatio,
+        touchXRatio: touchXRatio,
+        creaseTop: Offset(topX, 0),
+        creaseMid: Offset(midX, fy),
+        creaseBottom: Offset(botX, h),
+        edgeTop: Offset(eTopX, 0),
+        edgeMid: Offset(eMidX, fy),
+        edgeBottom: Offset(eBotX, h),
+        curlDepth: flapDepth,
+        bowMagnitude: bow,
       );
     } else {
-      // مسك من الحافة اليمنى وسحب يساراً: خط الثنية يتقدم من اليمين نحو اليسار
-      final double base = w * (1.0 - progress * 0.72);
-      return _FoldGeometry(
+      // مسك من الحافة اليمنى وسحب يساراً: خط الثنية يتحرك من اليمين نحو اليسار
+      final double baseX = w * (0.96 - 0.88 * p);
+      final double topX = (baseX + diagonalSkew).clamp(0.0, w);
+      final double botX = (baseX - diagonalSkew).clamp(0.0, w);
+      final double midX = ((topX + botX) * 0.5 - bow).clamp(0.0, w);
+
+      final double eTopX = (topX + flapDepth).clamp(0.0, w * 1.12);
+      final double eBotX = (botX + flapDepth).clamp(0.0, w * 1.12);
+      final double eMidX =
+          ((eTopX + eBotX) * 0.5 - bow * 1.35).clamp(0.0, w * 1.12);
+
+      return _CurlMeshModel(
         size: size,
         direction: direction,
-        progress: progress,
-        topX: (base + slant).clamp(0.0, w),
-        bottomX: (base - slant).clamp(0.0, w),
-        bowX: -bow,
-        focusY: fy,
-        flapWidth: flap,
+        progress: p,
+        dyRatio: dyRatio,
+        touchXRatio: touchXRatio,
+        creaseTop: Offset(topX, 0),
+        creaseMid: Offset(midX, fy),
+        creaseBottom: Offset(botX, h),
+        edgeTop: Offset(eTopX, 0),
+        edgeMid: Offset(eMidX, fy),
+        edgeBottom: Offset(eBotX, h),
+        curlDepth: flapDepth,
+        bowMagnitude: bow,
       );
     }
   }
 
-  Path creasePath({double shiftX = 0.0}) {
-    final double midX = (topX + bottomX) * 0.5 + bowX + shiftX;
+  Path creaseCurve() {
     return Path()
-      ..moveTo(topX + shiftX, 0)
-      ..quadraticBezierTo(midX, focusY, bottomX + shiftX, size.height);
+      ..moveTo(creaseTop.dx, creaseTop.dy)
+      ..quadraticBezierTo(
+          creaseMid.dx, creaseMid.dy, creaseBottom.dx, creaseBottom.dy);
   }
 
-  Path outerFlapPath({double shiftX = 0.0}) {
-    // عندما direction < 0 (سحب يميناً)، الطرف المنثني يمتد لليسار (-flapWidth)
-    // عندما direction > 0 (سحب يساراً)، الطرف المنثني يمتد لليمين (+flapWidth)
-    final double tOut =
-        (topX + direction * flapWidth).clamp(0.0, size.width) + shiftX;
-    final double bOut =
-        (bottomX + direction * flapWidth).clamp(0.0, size.width) + shiftX;
-    final double mOut =
-        ((tOut + bOut) * 0.5 + bowX * 1.25).clamp(0.0, size.width + shiftX.abs());
+  Path outerEdgeCurve() {
     return Path()
-      ..moveTo(tOut, 0)
-      ..quadraticBezierTo(mOut, focusY, bOut, size.height);
+      ..moveTo(edgeTop.dx, edgeTop.dy)
+      ..quadraticBezierTo(edgeMid.dx, edgeMid.dy, edgeBottom.dx, edgeBottom.dy);
   }
-}
 
-class _UnfoldedBodyClipper extends CustomClipper<Path> {
-  final _FoldGeometry spec;
-  _UnfoldedBodyClipper({required this.spec});
+  Path curledFlapRegion() {
+    return Path()
+      ..moveTo(creaseTop.dx, creaseTop.dy)
+      ..quadraticBezierTo(
+          creaseMid.dx, creaseMid.dy, creaseBottom.dx, creaseBottom.dy)
+      ..lineTo(edgeBottom.dx, edgeBottom.dy)
+      ..quadraticBezierTo(edgeMid.dx, edgeMid.dy, edgeTop.dx, edgeTop.dy)
+      ..close();
+  }
 
-  @override
-  Path getClip(Size size) {
-    final double midX = (spec.topX + spec.bottomX) * 0.5 + spec.bowX;
+  Path frontBodyRegion() {
     final Path path = Path();
-    if (spec.direction < 0) {
-      // سحب من اليسار لليمين: الجزء الثابت يقع على يمين خط الثنية
-      path.moveTo(spec.topX, 0);
+    if (direction < 0) {
+      // سحب من اليسار لليمين: الجزء الأمامي يقع على يمين خط الثنية
+      path.moveTo(creaseTop.dx, creaseTop.dy);
       path.lineTo(size.width, 0);
       path.lineTo(size.width, size.height);
-      path.lineTo(spec.bottomX, size.height);
-      path.quadraticBezierTo(midX, spec.focusY, spec.topX, 0);
+      path.lineTo(creaseBottom.dx, creaseBottom.dy);
+      path.quadraticBezierTo(
+          creaseMid.dx, creaseMid.dy, creaseTop.dx, creaseTop.dy);
       path.close();
     } else {
-      // سحب من اليمين لليسار: الجزء الثابت يقع على يسار خط الثنية
+      // سحب من اليمين لليسار: الجزء الأمامي يقع على يسار خط الثنية
       path.moveTo(0, 0);
-      path.lineTo(spec.topX, 0);
-      path.quadraticBezierTo(midX, spec.focusY, spec.bottomX, size.height);
+      path.lineTo(creaseTop.dx, creaseTop.dy);
+      path.quadraticBezierTo(
+          creaseMid.dx, creaseMid.dy, creaseBottom.dx, creaseBottom.dy);
       path.lineTo(0, size.height);
       path.close();
     }
@@ -1062,120 +1207,216 @@ class _UnfoldedBodyClipper extends CustomClipper<Path> {
   }
 
   @override
-  bool shouldReclip(covariant _UnfoldedBodyClipper oldClipper) => oldClipper.spec != spec;
-}
-
-class _FoldedFlapClipper extends CustomClipper<Path> {
-  final _FoldGeometry spec;
-  _FoldedFlapClipper({required this.spec});
-
-  @override
-  Path getClip(Size size) {
-    final double midX = (spec.topX + spec.bottomX) * 0.5 + spec.bowX;
-    final double tOut =
-        (spec.topX + spec.direction * spec.flapWidth).clamp(0.0, size.width);
-    final double bOut =
-        (spec.bottomX + spec.direction * spec.flapWidth).clamp(0.0, size.width);
-    final double mOut =
-        ((tOut + bOut) * 0.5 + spec.bowX * 1.25).clamp(0.0, size.width);
-
-    return Path()
-      ..moveTo(spec.topX, 0)
-      ..quadraticBezierTo(midX, spec.focusY, spec.bottomX, size.height)
-      ..lineTo(bOut, size.height)
-      ..quadraticBezierTo(mOut, spec.focusY, tOut, 0)
-      ..close();
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is _CurlMeshModel &&
+        other.size == size &&
+        other.direction == direction &&
+        other.progress == progress &&
+        other.dyRatio == dyRatio &&
+        other.touchXRatio == touchXRatio;
   }
 
   @override
-  bool shouldReclip(covariant _FoldedFlapClipper oldClipper) => oldClipper.spec != spec;
+  int get hashCode =>
+      Object.hash(size, direction, progress, dyRatio, touchXRatio);
 }
 
-class _CreaseShadowPainter extends CustomPainter {
-  final _FoldGeometry spec;
-  final double shiftX;
-  final double progress;
+class _FrontBodyClipper extends CustomClipper<Path> {
+  final _CurlMeshModel model;
+  _FrontBodyClipper({required this.model});
+
+  @override
+  Path getClip(Size size) => model.frontBodyRegion();
+
+  @override
+  bool shouldReclip(covariant _FrontBodyClipper oldClipper) =>
+      oldClipper.model != model;
+}
+
+class _CurledBackClipper extends CustomClipper<Path> {
+  final _CurlMeshModel model;
+  _CurledBackClipper({required this.model});
+
+  @override
+  Path getClip(Size size) => model.curledFlapRegion();
+
+  @override
+  bool shouldReclip(covariant _CurledBackClipper oldClipper) =>
+      oldClipper.model != model;
+}
+
+class _UnderPageCastShadowPainter extends CustomPainter {
+  final _CurlMeshModel model;
   final bool nightMode;
 
-  _CreaseShadowPainter({
-    required this.spec,
-    required this.shiftX,
-    required this.progress,
+  _UnderPageCastShadowPainter({
+    required this.model,
     required this.nightMode,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (progress <= 0.0) return;
-    final double sw = (24.0 * progress).clamp(4.0, 26.0);
-    final double alpha = (nightMode ? 0.34 : 0.24) * progress;
+    if (model.progress <= 0.0) return;
 
+    final double lift = math.sin(model.progress * math.pi * 0.75);
+    final double shadowWidth = (18.0 + 22.0 * lift).clamp(8.0, 40.0);
+    final double alpha = ((nightMode ? 0.42 : 0.30) * lift).clamp(0.0, 0.45);
+
+    // ظل ناعم ممتد من خط الثنية فوق الصفحة التالية
     canvas.drawPath(
-      spec.creasePath(shiftX: shiftX),
+      model.creaseCurve(),
       Paint()
         ..color = Colors.black.withValues(alpha: alpha)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = sw
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, sw * 0.55),
+        ..strokeWidth = shadowWidth
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, shadowWidth * 0.65),
+    );
+
+    // ظل إضافي خفيف تحت الحافة الملتفة للورقة
+    canvas.drawPath(
+      model.outerEdgeCurve(),
+      Paint()
+        ..color = Colors.black.withValues(alpha: alpha * 0.55)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = shadowWidth * 0.6
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, shadowWidth * 0.5),
     );
   }
 
   @override
-  bool shouldRepaint(covariant _CreaseShadowPainter oldDelegate) =>
-      oldDelegate.spec != spec ||
-      oldDelegate.shiftX != shiftX ||
-      oldDelegate.progress != progress ||
-      oldDelegate.nightMode != nightMode;
+  bool shouldRepaint(covariant _UnderPageCastShadowPainter oldDelegate) =>
+      oldDelegate.model != model || oldDelegate.nightMode != nightMode;
 }
 
-class _FlapCreasePainter extends CustomPainter {
-  final _FoldGeometry spec;
-  final double progress;
+class _FrontSurfaceLightingPainter extends CustomPainter {
+  final _CurlMeshModel model;
   final bool nightMode;
 
-  _FlapCreasePainter({
-    required this.spec,
-    required this.progress,
+  _FrontSurfaceLightingPainter({
+    required this.model,
     required this.nightMode,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (progress <= 0.0) return;
+    if (model.progress <= 0.0) return;
 
-    canvas.drawPath(
-      spec.outerFlapPath(),
-      Paint()
-        ..color = Colors.black.withValues(alpha: 0.20 * progress)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 9.0
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.5),
+    final double band = (28.0 + 24.0 * model.progress).clamp(16.0, 52.0);
+    final double midX = model.creaseMid.dx;
+    final double startX = (midX - band * model.direction).clamp(0.0, size.width);
+    final double endX = (midX + band * model.direction).clamp(0.0, size.width);
+
+    // إضاءة ناعمة قرب منطقة الانحناء لإبراز تقوّس الورقة
+    final Rect lightRect = Rect.fromLTRB(
+      math.min(startX, endX),
+      0,
+      math.max(startX, endX),
+      size.height,
     );
 
+    final Paint highlightPaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(midX, model.creaseMid.dy),
+        Offset(
+          (midX - model.direction * band * 0.8).clamp(0.0, size.width),
+          model.creaseMid.dy,
+        ),
+        [
+          (nightMode ? Colors.white : const Color(0xFFFFFDF8))
+              .withValues(alpha: (nightMode ? 0.14 : 0.24) * model.progress),
+          Colors.transparent,
+        ],
+      );
+
+    canvas.drawRect(lightRect, highlightPaint);
+
+    // خط اتصال/تجعد ناعم على حافة الانحناء
     canvas.drawPath(
-      spec.creasePath(),
+      model.creaseCurve(),
       Paint()
-        ..color = (nightMode ? Colors.white : Colors.black)
-            .withValues(alpha: (nightMode ? 0.16 : 0.22) * progress)
+        ..color = (nightMode ? Colors.black : const Color(0xFF4A3519))
+            .withValues(alpha: (nightMode ? 0.35 : 0.22) * model.progress)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4,
+        ..strokeWidth = 1.6
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
     );
   }
 
   @override
-  bool shouldRepaint(covariant _FlapCreasePainter oldDelegate) =>
-      oldDelegate.spec != spec ||
-      oldDelegate.progress != progress ||
-      oldDelegate.nightMode != nightMode;
+  bool shouldRepaint(covariant _FrontSurfaceLightingPainter oldDelegate) =>
+      oldDelegate.model != model || oldDelegate.nightMode != nightMode;
+}
+
+class _BackFaceShadingPainter extends CustomPainter {
+  final _CurlMeshModel model;
+  final bool nightMode;
+
+  _BackFaceShadingPainter({
+    required this.model,
+    required this.nightMode,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (model.progress <= 0.0) return;
+
+    final Path flapPath = model.curledFlapRegion();
+    final Rect bounds = flapPath.getBounds();
+    if (bounds.width <= 0 || bounds.height <= 0) return;
+
+    final Color paperTint =
+        nightMode ? const Color(0xFF1D2229) : const Color(0xFFF3E8D2);
+
+    // طبقة ورق خفيفة للوجه الخلفي للورقة المنثنية
+    canvas.drawPath(
+      flapPath,
+      Paint()
+        ..color = paperTint.withValues(alpha: nightMode ? 0.56 : 0.48)
+        ..style = PaintingStyle.fill,
+    );
+
+    // تدرج ضوئي وتجعد داخل الجزء المنثني لإبراز التفاف الورقة
+    final Paint gradientPaint = Paint()
+      ..shader = ui.Gradient.linear(
+        model.creaseMid,
+        model.edgeMid,
+        [
+          Colors.black.withValues(alpha: (nightMode ? 0.34 : 0.24) * model.progress),
+          (nightMode ? Colors.white : const Color(0xFFFFFCF5))
+              .withValues(alpha: (nightMode ? 0.10 : 0.18) * model.progress),
+          Colors.black.withValues(alpha: (nightMode ? 0.28 : 0.20) * model.progress),
+        ],
+        const [0.0, 0.45, 1.0],
+      );
+
+    canvas.drawPath(flapPath, gradientPaint);
+
+    // ظل ناعم على الحافة الخارجية للورقة الملتفة
+    canvas.drawPath(
+      model.outerEdgeCurve(),
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.24 * model.progress)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 7.0
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.5),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _BackFaceShadingPainter oldDelegate) =>
+      oldDelegate.model != model || oldDelegate.nightMode != nightMode;
 }
 
 class MushafSingleSheet extends StatelessWidget {
+  final ImageProvider? imageProvider;
   final int pageNumber;
   final bool nightMode;
   final double scale;
 
   const MushafSingleSheet({
     super.key,
+    this.imageProvider,
     required this.pageNumber,
     required this.nightMode,
     required this.scale,
@@ -1190,6 +1431,8 @@ class MushafSingleSheet extends StatelessWidget {
     final Color innerFrame =
         nightMode ? const Color(0xFF8F6E1B) : const Color(0xFFB6833A);
     final String assetPath = 'assets/images/quran/$pageNumber.png';
+    final ImageProvider resolvedProvider =
+        imageProvider ?? AssetImage(assetPath);
 
     return Transform.scale(
       scale: scale,
@@ -1204,9 +1447,10 @@ class MushafSingleSheet extends StatelessWidget {
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-            child: Image.asset(
-              assetPath,
+            child: Image(
+              image: resolvedProvider,
               fit: BoxFit.contain,
+              gaplessPlayback: true,
               errorBuilder: (context, error, stackTrace) {
                 return Center(
                   child: Column(
@@ -1287,7 +1531,12 @@ class _QuranFramePainter extends CustomPainter {
       ..strokeWidth = 2.2
       ..strokeCap = StrokeCap.square;
 
-    for (final c in [outer.topLeft, outer.topRight, outer.bottomLeft, outer.bottomRight]) {
+    for (final c in [
+      outer.topLeft,
+      outer.topRight,
+      outer.bottomLeft,
+      outer.bottomRight
+    ]) {
       final double dx = c.dx == outer.left ? 1.0 : -1.0;
       final double dy = c.dy == outer.top ? 1.0 : -1.0;
       canvas.drawLine(c, Offset(c.dx + dx * cornerLen, c.dy), cornerPaint);
@@ -1365,7 +1614,8 @@ class _BottomBar extends StatelessWidget {
               children: [
                 Text(
                   'الورد اليومي: $wirdRead / $wirdGoal صفحة',
-                  style: TextStyle(fontSize: 12, color: textColor.withValues(alpha: 0.85)),
+                  style: TextStyle(
+                      fontSize: 12, color: textColor.withValues(alpha: 0.85)),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -1385,10 +1635,26 @@ class _BottomBar extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _BarBtn(icon: Icons.menu_book_outlined, label: 'الفهرس', color: textColor, onTap: onOpenSurahs),
-                _BarBtn(icon: Icons.grid_view_outlined, label: 'الأجزاء', color: textColor, onTap: onOpenJuz),
-                _BarBtn(icon: Icons.track_changes_outlined, label: 'الورد', color: textColor, onTap: onOpenWird),
-                _BarBtn(icon: Icons.zoom_in_outlined, label: 'الحجم', color: textColor, onTap: onOpenScale),
+                _BarBtn(
+                    icon: Icons.menu_book_outlined,
+                    label: 'الفهرس',
+                    color: textColor,
+                    onTap: onOpenSurahs),
+                _BarBtn(
+                    icon: Icons.grid_view_outlined,
+                    label: 'الأجزاء',
+                    color: textColor,
+                    onTap: onOpenJuz),
+                _BarBtn(
+                    icon: Icons.track_changes_outlined,
+                    label: 'الورد',
+                    color: textColor,
+                    onTap: onOpenWird),
+                _BarBtn(
+                    icon: Icons.zoom_in_outlined,
+                    label: 'الحجم',
+                    color: textColor,
+                    onTap: onOpenScale),
               ],
             ),
           ],
