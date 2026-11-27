@@ -298,7 +298,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     with SingleTickerProviderStateMixin {
   static const int totalPages = 604;
 
-  // لون الحبل الأحمر أخف وأهدأ (لقطة أ)
   static const Color _softBookmarkRed = Color(0xFFC94A4A);
   static const Color _softBookmarkRedLight = Color(0xFFD96B6B);
   static const Color _softBookmarkRedDark = Color(0xFF9E3434);
@@ -311,13 +310,11 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   String _lastWirdDate = '';
   double _pageScale = 1.0;
 
-  // إعدادات الثيم (اللون والتدريجة) والشريط السفلي المخفي افتراضياً (لقطة أ)
   String _selectedThemeId = 'classic_cream';
   double _themeHue = 38.0;
   double _themeShade = 0.14;
   bool _showBottomBar = false;
 
-  // تتبع اللمس المباشر من الحافتين (السحب فقط للتقليب، والنقر الخفيف لإظهار الشريط السفلي)
   int? _activePointerId;
   double _startX = 0.0;
   double _startY = 0.0;
@@ -329,8 +326,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   double _verticalTravelRatio = 0.0;
   bool _hasMovedBeyondTap = false;
 
-  // -1 للانتقال للصفحة التالية (مسك من اليسار وسحب يميناً)
-  // +1 للرجوع للصفحة السابقة (مسك من اليمين وسحب يساراً)
   int _dragDir = 0;
   double _progress = 0.0;
   bool _settling = false;
@@ -550,7 +545,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
 
     if (dx.abs() > 10.0 || dy.abs() > 10.0) {
       _hasMovedBeyondTap = true;
-      // العودة للسحب/اللمس المتنقل تُخفي الشريط السفلي تلقائياً (لقطة أ)
       if (_showBottomBar) {
         _showBottomBar = false;
       }
@@ -571,7 +565,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       return;
     }
 
-    // التقليب بالسحب فقط في الاتجاه الصحيح من الحافة الممسوكة
     final double signedTravel = _dragDir < 0 ? dx : -dx;
     final double raw = (signedTravel / (width * 0.44)).clamp(0.0, 1.0);
 
@@ -587,7 +580,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     if (_activePointerId == null || pointer != _activePointerId) return;
     if (_settling) return;
 
-    // إذا كان نقراً خفيفاً دون سحب، نبدّل ظهور الشريط السفلي (لقطة أ)
     if (!_hasMovedBeyondTap && _progress <= 0.001) {
       setState(() {
         _activePointerId = null;
@@ -773,7 +765,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
               },
             ),
           ),
-          // الشريط السفلي مخفي افتراضياً ويظهر بنقرة خفيفة ويختفي بالعودة للسحب/اللمس (لقطة أ)
           if (_showBottomBar)
             _BottomBar(
               palette: palette,
@@ -833,8 +824,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                           decoration: BoxDecoration(
                             color: livePalette.background,
                             shape: BoxShape.circle,
-                            border:
-                                Border.all(color: livePalette.accent, width: 1.5),
+                            border: Border.all(
+                                color: livePalette.accent, width: 1.5),
                           ),
                         ),
                       ],
@@ -1491,23 +1482,19 @@ class _CurlMeshModel {
     final double h = size.height;
     final double p = progress.clamp(0.0, 1.0);
 
-    // 1. الانحناء والتقوّس: يبدأ مبكراً ويلين عند الاكتمال عبر sin(p * pi)^0.75
     final double bell = math.sin(p * math.pi).clamp(0.0, 1.0);
     final double earlyBowFactor = math.pow(bell, 0.75).toDouble();
     final double bow = w * 0.115 * earlyBowFactor;
 
-    // عمق طي متوازن يمنع تسطح القناع في منتصف الحركة
     final double flapDepth =
         (w * (0.12 + 0.24 * math.sin(p * math.pi * 0.78))).clamp(16.0, w * 0.38);
 
-    // 2. ميل الطي: يجمع موضع الإصبع الرأسي واتجاه حركته صعوداً/هبوطاً
     final double verticalBias = (dyRatio - 0.5) * 2.0;
     final double motionTilt = (verticalTravelRatio * 1.6).clamp(-0.65, 0.65);
     final double horizontalBias = (touchXRatio - 0.5).abs();
     final double diagonalSkew =
         (verticalBias * 0.65 + motionTilt) * w * (0.22 + 0.06 * horizontalBias) * p;
 
-    // نقطة التركيز متصلة بمنتصف الصفحة حتى لا ينكسر خط الطي بحدة عند الحواف
     final double blendedRatioY = ui.lerpDouble(0.5, dyRatio, 0.68)!;
     final double fy = (h * blendedRatioY).clamp(h * 0.16, h * 0.84);
 
@@ -1656,10 +1643,9 @@ class _CurledBackClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(covariant _CurledBackClipper oldClipper) =>
-      oldDelegate.model != model;
+      oldClipper.model != model;
 }
 
-// 3. الظلال: ظل مزدوج على الصفحة السفلى (قريب حاد نسبياً + أوسع وأخف حسب ارتفاع الورقة)
 class _UnderPageCastShadowPainter extends CustomPainter {
   final _CurlMeshModel model;
 
@@ -1673,7 +1659,6 @@ class _UnderPageCastShadowPainter extends CustomPainter {
     final double broadWidth = (16.0 + 26.0 * lift).clamp(8.0, 42.0);
     final double broadAlpha = (0.26 * lift).clamp(0.0, 0.30);
 
-    // ظل أوسع وأخف يعبر عن ارتفاع الجزء المرفوع في منتصف التقليب
     canvas.drawPath(
       model.creaseCurve(),
       Paint()
@@ -1683,7 +1668,6 @@ class _UnderPageCastShadowPainter extends CustomPainter {
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, broadWidth * 0.72),
     );
 
-    // ظل قريب أضيق عند خط الثنية نفسه
     canvas.drawPath(
       model.creaseCurve(),
       Paint()
@@ -1693,7 +1677,6 @@ class _UnderPageCastShadowPainter extends CustomPainter {
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0),
     );
 
-    // ظل ناعم تحت الحافة الخارجية الملتفة
     canvas.drawPath(
       model.outerEdgeCurve(),
       Paint()
@@ -1709,7 +1692,6 @@ class _UnderPageCastShadowPainter extends CustomPainter {
       oldDelegate.model != model;
 }
 
-// 4. الإضاءة: شريط ضوئي يتبع التقوّس وتبلغ ذروته في منتصف التقليب ثم يتلاشى
 class _FrontSurfaceLightingPainter extends CustomPainter {
   final _CurlMeshModel model;
 
@@ -1788,7 +1770,6 @@ class _BackFaceShadingPainter extends CustomPainter {
         ..style = PaintingStyle.fill,
     );
 
-    // تدرج أسطواني داخل الجزء المنثني: أغمق قرب الثنية، مضيء في منتصف الانحناء، ومظلل قرب الحافة
     final Paint gradientPaint = Paint()
       ..shader = ui.Gradient.linear(
         model.creaseMid,
