@@ -20,12 +20,17 @@ class QuranVerseItem {
       fallback: 1,
     );
     final ayahNum = _parseInt(
-      json['aya'] ?? json['ayah'] ?? json['verse'] ?? json['ayah_number'] ?? json['id'],
+      json['aya'] ??
+          json['ayah'] ??
+          json['verse'] ??
+          json['ayah_number'] ??
+          json['id'],
       fallback: 1,
     );
-    final rawName = (json['surah_name'] ?? json['sura_name'] ?? json['name'] ?? '')
-        .toString()
-        .trim();
+    final rawName =
+        (json['surah_name'] ?? json['sura_name'] ?? json['name'] ?? '')
+            .toString()
+            .trim();
     final verseText = (json['uthmani'] ??
             json['text'] ??
             json['aya_text'] ??
@@ -95,8 +100,12 @@ class HisnCategory {
     required this.items,
   });
 
-  factory HisnCategory.fromJson(Map<String, dynamic> json, {int fallbackId = 1}) {
-    final rawArray = json['array'] ?? json['items'] ?? json['zikr'] ?? const [];
+  factory HisnCategory.fromJson(
+    Map<String, dynamic> json, {
+    int fallbackId = 1,
+  }) {
+    final rawArray =
+        json['array'] ?? json['items'] ?? json['zikr'] ?? const <dynamic>[];
     final List<HisnItem> parsedItems = <HisnItem>[];
 
     if (rawArray is List) {
@@ -222,7 +231,8 @@ class LocalIslamicRepository {
           }
         }
       } else if (decoded is Map<String, dynamic>) {
-        final listNode = decoded['categories'] ?? decoded['data'] ?? decoded['hisn'];
+        final listNode =
+            decoded['categories'] ?? decoded['data'] ?? decoded['hisn'];
         if (listNode is List) {
           for (int i = 0; i < listNode.length; i++) {
             final entry = listNode[i];
