@@ -6,7 +6,7 @@ class _CityPreset {
   final String name;
   final double latitude;
   final double longitude;
-  final CalculationMethod Function() methodBuilder;
+  final CalculationParameters Function() methodBuilder;
 
   const _CityPreset({
     required this.name,
@@ -222,7 +222,6 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
           padding: const EdgeInsets.all(14),
           child: Column(
             children: [
-              // شريط اختيار المدينة
               SizedBox(
                 height: 42,
                 child: ListView.separated(
@@ -245,8 +244,6 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-
-              // بطاقة الصلاة القادمة والعد التنازلي
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(18),
@@ -301,8 +298,6 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-
-              // جدول مواقيت اليوم
               Expanded(
                 child: ListView.separated(
                   itemCount: rows.length,
