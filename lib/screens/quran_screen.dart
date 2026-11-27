@@ -24,7 +24,7 @@ class _QuranScreenState extends State<QuranScreen>
   static const String _prefFontScale = 'quran_font_scale';
 
   late PageController _pageController;
-  late AnimationController _curlController;
+  late AnimationController _settleController;
 
   int _currentPage = 1;
   bool _nightMode = false;
@@ -32,25 +32,25 @@ class _QuranScreenState extends State<QuranScreen>
   int _dailyWirdPages = 20;
   double _fontScale = 1.0;
 
+  // تحكم مباشر بالورقة أثناء السحب
   bool _isDragging = false;
-  bool _openingNextPage = true;
-  double _rawProgress = 0.0;
+  bool _openingNextPage = true; // true: يسار -> يمين (الصفحة التالية)
+  double _progress = 0.0; // 0.0 = مستقرة، 1.0 = منقلبة بالكامل
   double _dragStartX = 0.0;
-  double _dragStartY = 0.0;
-  double _pointerRatioY = 0.12;
+  double _pointerRatioY = 0.15; // يبدأ من الجزء العلوي الأيسر
 
   @override
   void initState() {
     super.initState();
     _currentPage = widget.initialPage.clamp(1, _totalPages);
     _pageController = PageController(initialPage: _currentPage - 1);
-    _curlController = AnimationController(
+    _settleController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 420),
+      duration: const Duration(milliseconds: 300),
     )..addListener(() {
         if (!_isDragging) {
           setState(() {
-            _rawProgress = _curlController.value;
+            _progress = _settleController.value;
           });
         }
       });
@@ -61,7 +61,7 @@ class _QuranScreenState extends State<QuranScreen>
   @override
   void dispose() {
     _pageController.dispose();
-    _curlController.dispose();
+    _settleController.dispose();
     super.dispose();
   }
 
@@ -149,7 +149,7 @@ class _QuranScreenState extends State<QuranScreen>
     setState(() {
       _currentPage = target;
       _isDragging = false;
-      _rawProgress = 0.0;
+      _progress = 0.0;
     });
     _saveLastPage(target);
     if (_pageController.hasClients) {
@@ -165,33 +165,16 @@ class _QuranScreenState extends State<QuranScreen>
     return (((pageNumber - 1) ~/ 20) + 1).clamp(1, 30);
   }
 
-  double _shapedProgress(double t) {
-    final clamped = t.clamp(0.0, 1.0);
-    if (clamped <= 0.15) {
-      return Curves.easeOut.transform(clamped / 0.15) * 0.15;
-    } else if (clamped <= 0.55) {
-      return 0.15 +
-          Curves.easeInOutCubic.transform((clamped - 0.15) / 0.40) * 0.40;
-    } else if (clamped <= 0.80) {
-      return 0.55 +
-          Curves.easeInOutCubic.transform((clamped - 0.55) / 0.25) * 0.25;
-    } else {
-      return 0.80 +
-          Curves.easeOutCubic.transform((clamped - 0.80) / 0.20) * 0.20;
-    }
-  }
-
   void _onHorizontalDragStart(DragStartDetails details, double height) {
-    if (_curlController.isAnimating) {
-      _curlController.stop();
+    if (_settleController.isAnimating) {
+      _settleController.stop();
     }
     setState(() {
       _isDragging = true;
       _dragStartX = details.globalPosition.dx;
-      _dragStartY = details.globalPosition.dy;
       _pointerRatioY =
-          height > 0 ? (_dragStartY / height).clamp(0.05, 0.85) : 0.12;
-      _rawProgress = 0.0;
+          height > 0 ? (details.globalPosition.dy / height).clamp(0.05, 0.90) : 0.15;
+      _progress = 0.0;
     });
   }
 
@@ -203,22 +186,24 @@ class _QuranScreenState extends State<QuranScreen>
     if (!_isDragging || width <= 0) return;
 
     final deltaX = details.globalPosition.dx - _dragStartX;
-    final ratioY = height > 0
-        ? (details.globalPosition.dy / height).clamp(0.05, 0.85)
-        : 0.12;
+    final ratioY =
+        height > 0 ? (details.globalPosition.dy / height).clamp(0.05, 0.90) : 0.15;
 
+    // السحب من اليسار إلى اليمين (deltaX > 0) يفتح الصفحة التالية
     if (deltaX > 0 && _currentPage < _totalPages) {
       _openingNextPage = true;
       _pointerRatioY = ratioY;
-      _rawProgress = (deltaX / width).clamp(0.0, 1.0);
+      _progress = (deltaX / (width * 0.85)).clamp(0.0, 1.0);
       setState(() {});
-    } else if (deltaX < 0 && _currentPage > 1) {
+    }
+    // السحب من اليمين إلى اليسار (deltaX < 0) يعود للصفحة السابقة
+    else if (deltaX < 0 && _currentPage > 1) {
       _openingNextPage = false;
       _pointerRatioY = ratioY;
-      _rawProgress = (-deltaX / width).clamp(0.0, 1.0);
+      _progress = (-deltaX / (width * 0.85)).clamp(0.0, 1.0);
       setState(() {});
     } else {
-      setState(() => _rawProgress = 0.0);
+      setState(() => _progress = 0.0);
     }
   }
 
@@ -226,7 +211,7 @@ class _QuranScreenState extends State<QuranScreen>
     if (!_isDragging) return;
 
     final velocity = details.primaryVelocity ?? 0.0;
-    final shouldComplete = _rawProgress >= 0.40 || velocity.abs() > 750;
+    final shouldComplete = _progress >= 0.40 || velocity.abs() > 750;
     final targetPage = _openingNextPage
         ? (_currentPage + 1).clamp(1, _totalPages)
         : (_currentPage - 1).clamp(1, _totalPages);
@@ -234,15 +219,23 @@ class _QuranScreenState extends State<QuranScreen>
     _isDragging = false;
 
     if (shouldComplete && targetPage != _currentPage) {
-      _curlController.forward(from: _rawProgress).then((_) {
+      _settleController.animateTo(
+        1.0,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+      ).then((_) {
         if (!mounted) return;
         _goToPage(targetPage);
-        _curlController.reset();
+        _settleController.reset();
       });
     } else {
-      _curlController.reverse(from: _rawProgress).then((_) {
+      _settleController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+      ).then((_) {
         if (!mounted) return;
-        setState(() => _rawProgress = 0.0);
+        setState(() => _progress = 0.0);
       });
     }
   }
@@ -482,41 +475,64 @@ class _QuranScreenState extends State<QuranScreen>
     );
   }
 
-  // حساب خط الطيّ والزاوية المطوية قطرياً من الأعلى لليسار نحو اليمين والأسفل
-  _CornerFoldData _computeFoldData(Size size, double progress) {
-    final w = size.width;
-    final h = size.height;
-    final t = _openingNextPage ? progress : (1.0 - progress);
-    final easedT = t.clamp(0.0, 1.0);
+  Widget _buildRealPageSheet({
+    required int pageNumber,
+    required double p,
+    required double width,
+    required double height,
+  }) {
+    final curveLift = math.sin(p * math.pi);
 
-    // نقطة انطلاق الزاوية العلوية اليسرى أثناء رفعها نحو اليمين والأسفل
-    final cornerX = (w * (0.14 + easedT * 0.92)).clamp(0.0, w * 1.15);
-    final cornerY = (h * (0.06 + easedT * 0.78 * (0.55 + _pointerRatioY)))
-        .clamp(0.0, h * 1.15);
+    // دوران الورقة حول الحافة اليمنى (محور ارتكاز المصحف العربي)
+    final angleY = _openingNextPage ? (-math.pi * 0.62 * p) : (-math.pi * 0.62 * (1.0 - p));
 
-    // خط الطي العمودي على منتصف المسافة بين الزاوية الأصلية (0,0) وموضعها الحالي
-    final midX = cornerX * 0.5;
-    final midY = cornerY * 0.5;
+    // ميلان طبيعي حسب ارتفاع إصبعك (كلما سحبت من الأعلى زاد ميلان الجزء العلوي)
+    final topPullFactor = (1.0 - _pointerRatioY).clamp(0.1, 0.95);
+    final angleZ = _openingNextPage
+        ? (-0.16 * curveLift * topPullFactor)
+        : (0.16 * curveLift * topPullFactor);
 
-    // متجه خط الطي
-    final dirX = -cornerY;
-    final dirY = cornerX;
-    final norm = math.sqrt(dirX * dirX + dirY * dirY).clamp(1.0, double.infinity);
-    final ux = dirX / norm;
-    final uy = dirY / norm;
+    // انزياح أفقي وارتفاع طفيف للورقة أثناء السحب
+    final shiftX = _openingNextPage ? (width * 0.28 * p) : (width * 0.28 * (1.0 - p));
+    final liftY = height * 0.025 * curveLift;
 
-    final span = (w + h) * 1.4;
-    final foldStart = Offset(midX - ux * span, midY - uy * span);
-    final foldEnd = Offset(midX + ux * span, midY + uy * span);
+    final sheetMatrix = Matrix4.identity()
+      ..setEntry(3, 2, 0.0012)
+      ..translate(shiftX, liftY, 0.0)
+      ..rotateY(angleY)
+      ..rotateZ(angleZ);
 
-    // زاوية ميل الصفحة المنطوية حول خط الطي
-    final foldAngle = math.atan2(uy, ux);
+    final shadeAlpha = (0.32 * curveLift).clamp(0.0, 0.38);
 
-    return _CornerFoldData(
-      foldStart: foldStart,
-      foldEnd: foldEnd,
-      liftedCorner: Offset(cornerX, cornerY),
-      foldAngle: foldAngle,
+    return Transform(
+      alignment: Alignment.centerRight,
+      transform: sheetMatrix,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: _buildFullMushafPage(pageNumber, showControls: false),
+          ),
+          // تدرج إضاءة وظل ناعم على الورقة نفسها ليعطي ملمس انحناء الورقة
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      Colors.black.withValues(alpha: shadeAlpha),
+                      Colors.white.withValues(alpha: (0.12 * curveLift).clamp(0.0, 0.16)),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.0, 0.35, 1.0],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -524,7 +540,7 @@ class _QuranScreenState extends State<QuranScreen>
   Widget build(BuildContext context) {
     final backgroundColor =
         _nightMode ? const Color(0xFF14171A) : const Color(0xFFFFFDF8);
-    final effectiveProgress = _shapedProgress(_rawProgress);
+    final p = _progress.clamp(0.0, 1.0);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -533,20 +549,18 @@ class _QuranScreenState extends State<QuranScreen>
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final size = Size(constraints.maxWidth, constraints.maxHeight);
+              final width = constraints.maxWidth;
+              final height = constraints.maxHeight;
               final destinationPage = _openingNextPage
                   ? (_currentPage + 1).clamp(1, _totalPages)
                   : (_currentPage - 1).clamp(1, _totalPages);
-              final isFolding =
-                  effectiveProgress > 0.0 && destinationPage != _currentPage;
-              final foldData = _computeFoldData(size, effectiveProgress);
-              final lift = math.sin(effectiveProgress * math.pi);
+              final isMovingSheet = p > 0.0 && destinationPage != _currentPage;
+              final curveLift = math.sin(p * math.pi);
 
               return GestureDetector(
-                onHorizontalDragStart: (d) =>
-                    _onHorizontalDragStart(d, size.height),
+                onHorizontalDragStart: (d) => _onHorizontalDragStart(d, height),
                 onHorizontalDragUpdate: (d) =>
-                    _onHorizontalDragUpdate(d, size.width, size.height),
+                    _onHorizontalDragUpdate(d, width, height),
                 onHorizontalDragEnd: _onHorizontalDragEnd,
                 child: Stack(
                   children: [
@@ -562,91 +576,45 @@ class _QuranScreenState extends State<QuranScreen>
                       itemBuilder: (context, index) {
                         return _buildFullMushafPage(
                           index + 1,
-                          showControls: !isFolding,
+                          showControls: !isMovingSheet,
                         );
                       },
                     ),
-                    if (isFolding) ...[
-                      // 1. الصفحة التالية/السابقة المكشوفة أسفل الجزء المنطوي
+                    if (isMovingSheet) ...[
+                      // الصفحة التالية/السابقة أسفل الورقة المتحركة
                       Positioned.fill(
                         child: _buildFullMushafPage(
                           destinationPage,
                           showControls: false,
                         ),
                       ),
-                      // 2. ظل ناعم واقع على الصفحة السفلية بمحاذاة الطية
+                      // ظل ناعم يقع على الصفحة التحتية تحت الورقة المرتفعة
                       Positioned.fill(
                         child: IgnorePointer(
-                          child: CustomPaint(
-                            size: size,
-                            painter: _FoldShadowPainter(
-                              foldData: foldData,
-                              lift: lift,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                                colors: [
+                                  Colors.black.withValues(
+                                    alpha: (0.30 * curveLift).clamp(0.0, 0.36),
+                                  ),
+                                  Colors.transparent,
+                                ],
+                                stops: const [0.0, 0.45],
+                              ),
                             ),
                           ),
                         ),
                       ),
-                      // 3. الجزء غير المنطوي من الصفحة الحالية
+                      // الورقة الحالية التي تتحكم بها مباشرة بإصبعك
                       Positioned.fill(
-                        child: ClipPath(
-                          clipper: _UnfoldedAreaClipper(foldData: foldData),
-                          child: _buildFullMushafPage(
-                            _currentPage,
-                            showControls: false,
-                          ),
-                        ),
-                      ),
-                      // 4. الجزء المنطوي من الصفحة الحالية مع انعكاس وتظليل الورقة
-                      Positioned.fill(
-                        child: ClipPath(
-                          clipper: _FoldedFlapClipper(foldData: foldData),
-                          child: Transform(
-                            alignment: Alignment.topLeft,
-                            transform: Matrix4.identity()
-                              ..translate(
-                                foldData.liftedCorner.dx,
-                                foldData.liftedCorner.dy,
-                              )
-                              ..rotateZ(foldData.foldAngle * 0.55)
-                              ..scale(-1.0, 1.0),
-                            child: Stack(
-                              children: [
-                                SizedBox(
-                                  width: size.width,
-                                  height: size.height,
-                                  child: _buildFullMushafPage(
-                                    _currentPage,
-                                    showControls: false,
-                                  ),
-                                ),
-                                Positioned.fill(
-                                  child: IgnorePointer(
-                                    child: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                          colors: [
-                                            Colors.black.withValues(
-                                              alpha: (0.16 + 0.14 * lift)
-                                                  .clamp(0.0, 0.38),
-                                            ),
-                                            Colors.white.withValues(
-                                              alpha: 0.14,
-                                            ),
-                                            Colors.black.withValues(
-                                              alpha: (0.24 + 0.16 * lift)
-                                                  .clamp(0.0, 0.44),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                        child: _buildRealPageSheet(
+                          pageNumber: _currentPage,
+                          p: p,
+                          width: width,
+                          height: height,
                         ),
                       ),
                     ],
@@ -658,102 +626,6 @@ class _QuranScreenState extends State<QuranScreen>
         ),
       ),
     );
-  }
-}
-
-class _CornerFoldData {
-  final Offset foldStart;
-  final Offset foldEnd;
-  final Offset liftedCorner;
-  final double foldAngle;
-
-  const _CornerFoldData({
-    required this.foldStart,
-    required this.foldEnd,
-    required this.liftedCorner,
-    required this.foldAngle,
-  });
-}
-
-class _UnfoldedAreaClipper extends CustomClipper<Path> {
-  final _CornerFoldData foldData;
-
-  const _UnfoldedAreaClipper({required this.foldData});
-
-  @override
-  Path getClip(Size size) {
-    final path = Path()
-      ..moveTo(foldData.foldStart.dx, foldData.foldStart.dy)
-      ..lineTo(foldData.foldEnd.dx, foldData.foldEnd.dy)
-      ..lineTo(size.width * 2, size.height * 2)
-      ..lineTo(size.width * 2, -size.height)
-      ..lineTo(-size.width, size.height * 2)
-      ..close();
-    return path;
-  }
-
-  @override
-  bool shouldReclip(covariant _UnfoldedAreaClipper oldClipper) {
-    return oldClipper.foldData != foldData;
-  }
-}
-
-class _FoldedFlapClipper extends CustomClipper<Path> {
-  final _CornerFoldData foldData;
-
-  const _FoldedFlapClipper({required this.foldData});
-
-  @override
-  Path getClip(Size size) {
-    final path = Path()
-      ..moveTo(foldData.foldStart.dx, foldData.foldStart.dy)
-      ..lineTo(foldData.foldEnd.dx, foldData.foldEnd.dy)
-      ..lineTo(-size.width, -size.height)
-      ..close();
-    return path;
-  }
-
-  @override
-  bool shouldReclip(covariant _FoldedFlapClipper oldClipper) {
-    return oldClipper.foldData != foldData;
-  }
-}
-
-class _FoldShadowPainter extends CustomPainter {
-  final _CornerFoldData foldData;
-  final double lift;
-
-  const _FoldShadowPainter({
-    required this.foldData,
-    required this.lift,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final foldPath = Path()
-      ..moveTo(foldData.foldStart.dx, foldData.foldStart.dy)
-      ..lineTo(foldData.foldEnd.dx, foldData.foldEnd.dy);
-
-    final shadowPaint = Paint()
-      ..color = Colors.black.withValues(
-        alpha: (0.24 + 0.16 * lift).clamp(0.0, 0.42),
-      )
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 24.0 + 14.0 * lift
-      ..maskFilter = MaskFilter.blur(
-        BlurStyle.normal,
-        10.0 + 8.0 * lift,
-      );
-
-    canvas.save();
-    canvas.translate(5.0, 6.0);
-    canvas.drawPath(foldPath, shadowPaint);
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _FoldShadowPainter oldDelegate) {
-    return oldDelegate.foldData != foldData || oldDelegate.lift != lift;
   }
 }
 
