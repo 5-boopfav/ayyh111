@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -218,7 +220,7 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
   bool _nightMode = false;
   double _pageScale = 1.0;
 
-  // تتبع السحب المباشر
+  // تتبع السحب المباشر باللمس
   int? _pointerId;
   double _startX = 0.0;
   double _lastX = 0.0;
@@ -393,7 +395,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
       return;
     }
 
-    // نسبة حركة واضحة ومباشرة تتبع الإصبع وتبقى معلّقة عند توقفه
     final double raw = ((-dx * dir) / (width * 0.65)).clamp(0.0, 1.0);
     setState(() {
       _dragDir = dir;
@@ -545,8 +546,8 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
                           progress: _progress,
                         ),
 
-                      // 2. الورقة المنثنية (تحريك مباشر + قصّ مائل مقوّس + ظل + ظهر الورقة معكوساً)
-                      _ActiveCurledSheet(
+                      // 2. الورقة المنثنية مع Matrix4 ثلاثي الأبعاد والانثناء والظل وظهر الصفحة
+                      _Matrix3DCurledSheet(
                         currentPage: _currentPage,
                         backPage: underPage,
                         width: width,
@@ -800,7 +801,7 @@ class _UnderPageLayer extends StatelessWidget {
   }
 }
 
-class _ActiveCurledSheet extends StatelessWidget {
+class _Matrix3DCurledSheet extends StatelessWidget {
   final int currentPage;
   final int backPage;
   final double width;
@@ -811,7 +812,7 @@ class _ActiveCurledSheet extends StatelessWidget {
   final bool nightMode;
   final double scale;
 
-  const _ActiveCurledSheet({
+  const _Matrix3DCurledSheet({
     required this.currentPage,
     required this.backPage,
     required this.width,
@@ -822,6 +823,16 @@ class _ActiveCurledSheet extends StatelessWidget {
     required this.nightMode,
     required this.scale,
   });
+
+  Matrix4 _buildFlapPerspectiveMatrix() {
+    // مصفوفة تحويل ثلاثية الأبعاد مع عمق منظور ودوران حول المحور الرأسي للثنية
+    final Matrix4 m = Matrix4.identity()..setEntry(3, 2, 0.0012);
+    final double yawAngle = -direction * (math.pi * 0.42 * progress);
+    final double tiltX = (dyRatio - 0.5) * 0.14 * progress;
+    m.rotateY(yawAngle);
+    m.rotateX(tiltX);
+    return m;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -840,13 +851,14 @@ class _ActiveCurledSheet extends StatelessWidget {
       dyRatio: dyRatio,
     );
 
-    // إزاحة واقعية واضحة تتبع حركة السحب دون إخفاء الورقة
-    final double dxShift = direction * width * 0.22 * progress;
+    final Matrix4 flapMatrix = _buildFlapPerspectiveMatrix();
+    final Alignment flapAlignment =
+        direction < 0 ? Alignment.centerRight : Alignment.centerLeft;
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        // ظل على الصفحة الثابتة بمحاذاة خط العطف
+        // ظل خط العطف على الصفحة الثابتة تحت الورقة
         IgnorePointer(
           child: CustomPaint(
             size: Size(width, height),
@@ -858,24 +870,22 @@ class _ActiveCurledSheet extends StatelessWidget {
           ),
         ),
 
-        // الجزء غير المنعطف من الورقة الحالية مع إزاحة خفيفة متجاوبة
-        Transform.translate(
-          offset: Offset(dxShift, 0),
-          child: ClipPath(
-            clipper: _FixedSheetClipper(data: data),
-            child: MushafSingleSheet(
-              pageNumber: currentPage,
-              nightMode: nightMode,
-              scale: scale,
-            ),
+        // الجزء الثابت غير المنعطف من الورقة الحالية
+        ClipPath(
+          clipper: _FixedSheetClipper(data: data),
+          child: MushafSingleSheet(
+            pageNumber: currentPage,
+            nightMode: nightMode,
+            scale: scale,
           ),
         ),
 
-        // ظهر الجزء المنعطف: يعرض الصفحة التالية معكوسة مع ظل وحافة واضحة
-        Transform.translate(
-          offset: Offset(dxShift, 0),
-          child: ClipPath(
-            clipper: _FlapClipper(data: data),
+        // الجزء المنثني ثلاثي الأبعاد: يظهر الصفحة التالية معكوسة مع عمق Matrix4 وظل التقوّس
+        ClipPath(
+          clipper: _FlapClipper(data: data),
+          child: Transform(
+            alignment: flapAlignment,
+            transform: flapMatrix,
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -883,7 +893,7 @@ class _ActiveCurledSheet extends StatelessWidget {
                   alignment: Alignment.center,
                   transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
                   child: Opacity(
-                    opacity: nightMode ? 0.45 : 0.60,
+                    opacity: nightMode ? 0.44 : 0.58,
                     child: MushafSingleSheet(
                       pageNumber: backPage,
                       nightMode: nightMode,
@@ -897,7 +907,7 @@ class _ActiveCurledSheet extends StatelessWidget {
                       color: (nightMode
                               ? const Color(0xFF1A1E24)
                               : const Color(0xFFF3EAD8))
-                          .withValues(alpha: nightMode ? 0.48 : 0.40),
+                          .withValues(alpha: nightMode ? 0.50 : 0.42),
                     ),
                   ),
                 ),
@@ -956,7 +966,7 @@ class _SheetCurlData {
     final double flap = (w * (0.16 + 0.24 * progress)).clamp(24.0, w * 0.45);
 
     if (direction < 0) {
-      final double base = w * (1.0 - progress * 0.85);
+      final double base = w * (1.0 - progress);
       return _SheetCurlData(
         size: size,
         direction: direction,
@@ -968,7 +978,7 @@ class _SheetCurlData {
         flapWidth: flap,
       );
     } else {
-      final double base = w * (progress * 0.85);
+      final double base = w * progress;
       return _SheetCurlData(
         size: size,
         direction: direction,
