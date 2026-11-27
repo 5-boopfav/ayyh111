@@ -24,7 +24,7 @@ class _QuranScreenState extends State<QuranScreen>
   static const String _prefFontScale = 'quran_font_scale';
 
   late PageController _pageController;
-  late AnimationController _flipController;
+  late AnimationController _waveController;
 
   int _currentPage = 1;
   bool _nightMode = false;
@@ -33,24 +33,24 @@ class _QuranScreenState extends State<QuranScreen>
   double _fontScale = 1.0;
 
   bool _isDragging = false;
-  bool _openingNextPage = true;
+  bool _openingNextPage = true; // true: يسار -> يمين (الصفحة التالية)
   double _rawProgress = 0.0;
   double _dragStartX = 0.0;
   double _dragStartY = 0.0;
-  double _pointerRatioY = 0.12;
+  double _pointerRatioY = 0.25;
 
   @override
   void initState() {
     super.initState();
     _currentPage = widget.initialPage.clamp(1, _totalPages);
     _pageController = PageController(initialPage: _currentPage - 1);
-    _flipController = AnimationController(
+    _waveController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 360),
+      duration: const Duration(milliseconds: 420),
     )..addListener(() {
         if (!_isDragging) {
           setState(() {
-            _rawProgress = _flipController.value;
+            _rawProgress = _waveController.value;
           });
         }
       });
@@ -61,7 +61,7 @@ class _QuranScreenState extends State<QuranScreen>
   @override
   void dispose() {
     _pageController.dispose();
-    _flipController.dispose();
+    _waveController.dispose();
     super.dispose();
   }
 
@@ -165,6 +165,7 @@ class _QuranScreenState extends State<QuranScreen>
     return (((pageNumber - 1) ~/ 20) + 1).clamp(1, 30);
   }
 
+  // منحنى حركة الورقة من اللمس الأول إلى السحب والانثناء ثم الاستقرار
   double _shapedProgress(double t) {
     final clamped = t.clamp(0.0, 1.0);
     if (clamped <= 0.15) {
@@ -182,15 +183,15 @@ class _QuranScreenState extends State<QuranScreen>
   }
 
   void _onHorizontalDragStart(DragStartDetails details, double height) {
-    if (_flipController.isAnimating) {
-      _flipController.stop();
+    if (_waveController.isAnimating) {
+      _waveController.stop();
     }
     setState(() {
       _isDragging = true;
       _dragStartX = details.globalPosition.dx;
       _dragStartY = details.globalPosition.dy;
       _pointerRatioY =
-          height > 0 ? (_dragStartY / height).clamp(0.05, 0.85) : 0.12;
+          height > 0 ? (_dragStartY / height).clamp(0.05, 0.90) : 0.25;
       _rawProgress = 0.0;
     });
   }
@@ -204,15 +205,18 @@ class _QuranScreenState extends State<QuranScreen>
 
     final deltaX = details.globalPosition.dx - _dragStartX;
     final ratioY = height > 0
-        ? (details.globalPosition.dy / height).clamp(0.05, 0.85)
-        : 0.12;
+        ? (details.globalPosition.dy / height).clamp(0.05, 0.90)
+        : 0.25;
 
+    // السحب من اليسار إلى اليمين (deltaX > 0) يفتح الصفحة التالية
     if (deltaX > 0 && _currentPage < _totalPages) {
       _openingNextPage = true;
       _pointerRatioY = ratioY;
       _rawProgress = (deltaX / width).clamp(0.0, 1.0);
       setState(() {});
-    } else if (deltaX < 0 && _currentPage > 1) {
+    }
+    // السحب من اليمين إلى اليسار (deltaX < 0) يعود للصفحة السابقة
+    else if (deltaX < 0 && _currentPage > 1) {
       _openingNextPage = false;
       _pointerRatioY = ratioY;
       _rawProgress = (-deltaX / width).clamp(0.0, 1.0);
@@ -234,13 +238,13 @@ class _QuranScreenState extends State<QuranScreen>
     _isDragging = false;
 
     if (shouldComplete && targetPage != _currentPage) {
-      _flipController.forward(from: _rawProgress).then((_) {
+      _waveController.forward(from: _rawProgress).then((_) {
         if (!mounted) return;
         _goToPage(targetPage);
-        _flipController.reset();
+        _waveController.reset();
       });
     } else {
-      _flipController.reverse(from: _rawProgress).then((_) {
+      _waveController.reverse(from: _rawProgress).then((_) {
         if (!mounted) return;
         setState(() => _rawProgress = 0.0);
       });
@@ -500,29 +504,27 @@ class _QuranScreenState extends State<QuranScreen>
               final destinationPage = _openingNextPage
                   ? (_currentPage + 1).clamp(1, _totalPages)
                   : (_currentPage - 1).clamp(1, _totalPages);
-              final isFlipping =
+              final isMoving =
                   effectiveProgress > 0.0 && destinationPage != _currentPage;
-              final lift = math.sin(effectiveProgress * math.pi);
+              final waveStrength = math.sin(effectiveProgress * math.pi);
 
-              // دوران وانقلاب الصفحة نفسها من الزاوية العلوية اليسرى نحو اليمين والأسفل
-              final angleZ = _openingNextPage
-                  ? (-0.42 * lift)
-                  : (0.42 * lift);
-              final angleY = _openingNextPage
-                  ? (-math.pi * 0.45 * effectiveProgress)
-                  : (math.pi * 0.45 * (1.0 - effectiveProgress));
-              final translateX = _openingNextPage
-                  ? (width * 0.65 * effectiveProgress)
-                  : (width * 0.65 * (1.0 - effectiveProgress));
-              final translateY = _openingNextPage
-                  ? (height * 0.25 * effectiveProgress * (0.5 + _pointerRatioY))
-                  : (height * 0.25 * (1.0 - effectiveProgress) * (0.5 + _pointerRatioY));
+              // حركة الورقة من اليسار إلى اليمين مع انثناء موجي ناعم وانسيابية
+              final turnAngleY = _openingNextPage
+                  ? (-math.pi * 0.58 * effectiveProgress)
+                  : (-math.pi * 0.58 * (1.0 - effectiveProgress));
+              final waveTiltZ = _openingNextPage
+                  ? (-0.12 * waveStrength * (1.15 - _pointerRatioY * 0.45))
+                  : (0.12 * waveStrength * (1.15 - _pointerRatioY * 0.45));
+              final shiftX = _openingNextPage
+                  ? (width * 0.25 * effectiveProgress)
+                  : (width * 0.25 * (1.0 - effectiveProgress));
+              final archY = height * 0.025 * waveStrength;
 
-              final flipMatrix = Matrix4.identity()
-                ..setEntry(3, 2, 0.001)
-                ..translate(translateX, translateY, 0.0)
-                ..rotateZ(angleZ)
-                ..rotateY(angleY);
+              final pageMatrix = Matrix4.identity()
+                ..setEntry(3, 2, 0.0012)
+                ..translate(shiftX, archY, 0.0)
+                ..rotateY(turnAngleY)
+                ..rotateZ(waveTiltZ);
 
               return GestureDetector(
                 onHorizontalDragStart: (d) => _onHorizontalDragStart(d, height),
@@ -543,28 +545,80 @@ class _QuranScreenState extends State<QuranScreen>
                       itemBuilder: (context, index) {
                         return _buildFullMushafPage(
                           index + 1,
-                          showControls: !isFlipping,
+                          showControls: !isMoving,
                         );
                       },
                     ),
-                    if (isFlipping) ...[
+                    if (isMoving) ...[
+                      // الصفحة التالية/السابقة أسفل الورقة المتحركة
                       Positioned.fill(
                         child: _buildFullMushafPage(
                           destinationPage,
                           showControls: false,
                         ),
                       ),
+                      // ظل ناعم متدرج على الصفحة السفلية تحت موجة الورقة
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 60),
+                            opacity: (0.34 * waveStrength).clamp(0.0, 0.42),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                  colors: [
+                                    Colors.black.withValues(alpha: 0.45),
+                                    Colors.black.withValues(alpha: 0.14),
+                                    Colors.transparent,
+                                  ],
+                                  stops: const [0.0, 0.45, 1.0],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // الورقة الحالية وهي تنحني وتتحرك من اليسار إلى اليمين
                       Positioned.fill(
                         child: Transform(
-                          alignment: Alignment.bottomRight,
-                          transform: flipMatrix,
-                          child: Opacity(
-                            opacity: (1.0 - effectiveProgress * 0.85)
-                                .clamp(0.0, 1.0),
-                            child: _buildFullMushafPage(
-                              _currentPage,
-                              showControls: false,
-                            ),
+                          alignment: Alignment.centerRight,
+                          transform: pageMatrix,
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: _buildFullMushafPage(
+                                  _currentPage,
+                                  showControls: false,
+                                ),
+                              ),
+                              // تظليل وإضاءة ناعمة تحاكي تقوّس الورقة أثناء السحب
+                              Positioned.fill(
+                                child: IgnorePointer(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.centerLeft,
+                                        end: Alignment.centerRight,
+                                        colors: [
+                                          Colors.black.withValues(
+                                            alpha: (0.28 * waveStrength)
+                                                .clamp(0.0, 0.35),
+                                          ),
+                                          Colors.white.withValues(
+                                            alpha: (0.14 * waveStrength)
+                                                .clamp(0.0, 0.18),
+                                          ),
+                                          Colors.transparent,
+                                        ],
+                                        stops: const [0.0, 0.35, 1.0],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
