@@ -228,7 +228,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
 
   // حالة التحكم المباشر بالورقة المنثنية
   double _dragStartX = 0.0;
-  double _dragStartY = 0.0;
   double _pointerDxRatio = 0.5;
   double _pointerDyRatio = 0.5;
 
@@ -369,7 +368,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen>
     }
     setState(() {
       _dragStartX = details.localPosition.dx;
-      _dragStartY = details.localPosition.dy;
       _pointerDxRatio =
           width > 0 ? (details.localPosition.dx / width).clamp(0.0, 1.0) : 0.5;
       _pointerDyRatio = height > 0
