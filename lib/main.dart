@@ -17,10 +17,15 @@ class BahmadApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       title: 'مصحف وأذان بحمد',
       debugShowCheckedModeBanner: false,
-      home: Directionality(
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.light,
+        colorSchemeSeed: const Color(0xFF235347),
+      ),
+      home: const Directionality(
         textDirection: TextDirection.rtl,
         child: MainThreeTabShell(),
       ),
@@ -384,14 +389,12 @@ class ThikrItem {
   final String category;
   final String text;
   final int targetCount;
-  final String note;
 
   const ThikrItem({
     required this.id,
     required this.category,
     required this.text,
     required this.targetCount,
-    this.note = '',
   });
 }
 
@@ -403,106 +406,6 @@ const List<String> kThikrCategories = [
 ];
 
 const List<ThikrItem> kThikrItems = [
-  ThikrItem(
-    id: 'm_1',
-    category: 'أذكار الصباح',
-    text: 'أصبحنا وأصبح الملك لله، والحمد لله، لا إله إلا الله وحده لا شريك له، له الملك وله الحمد وهو على كل شيء قدير.',
-    targetCount: 1,
-  ),
-  ThikrItem(
-    id: 'm_2',
-    category: 'أذكار الصباح',
-    text: 'اللهم بك أصبحنا وبك أمسينا وبك نحيا وبك نموت وإليك النشور.',
-    targetCount: 1,
-  ),
-  ThikrItem(
-    id: 'm_3',
-    category: 'أذكار الصباح',
-    text: 'رضيت بالله رباً، وبالإسلام ديناً، وبمحمد صلى الله عليه وسلم نبياً.',
-    targetCount: 3,
-  ),
-  ThikrItem(
-    id: 'm_4',
-    category: 'أذكار الصباح',
-    text: 'سبحان الله وبحمده، عدد خلقه، ورضا نفسه، وزنة عرشه، ومداد كلماته.',
-    targetCount: 3,
-  ),
-  ThikrItem(
-    id: 'm_5',
-    category: 'أذكار الصباح',
-    text: 'أستغفر الله العظيم الذي لا إله إلا هو الحي القيوم وأتوب إليه.',
-    targetCount: 3,
-  ),
-  ThikrItem(
-    id: 'e_1',
-    category: 'أذكار المساء',
-    text: 'أمسينا وأمسى الملك لله، والحمد لله، لا إله إلا الله وحده لا شريك له، له الملك وله الحمد وهو على كل شيء قدير.',
-    targetCount: 1,
-  ),
-  ThikrItem(
-    id: 'e_2',
-    category: 'أذكار المساء',
-    text: 'اللهم بك أمسينا وبك أصبحنا وبك نحيا وبك نموت وإليك المصير.',
-    targetCount: 1,
-  ),
-  ThikrItem(
-    id: 'e_3',
-    category: 'أذكار المساء',
-    text: 'أعوذ بكلمات الله التامات من شر ما خلق.',
-    targetCount: 3,
-  ),
-  ThikrItem(
-    id: 'e_4',
-    category: 'أذكار المساء',
-    text: 'بسم الله الذي لا يضر مع اسمه شيء في الأرض ولا في السماء وهو السميع العليم.',
-    targetCount: 3,
-  ),
-  ThikrItem(
-    id: 'p_1',
-    category: 'أذكار بعد الصلاة',
-    text: 'أستغفر الله، أستغفر الله، أستغفر الله. اللهم أنت السلام ومنك السلام، تباركت يا ذا الجلال والإكرام.',
-    targetCount: 1,
-  ),
-  ThikrItem(
-    id: 'p_2',
-    category: 'أذكار بعد الصلاة',
-    text: 'سبحان الله.',
-    targetCount: 33,
-  ),
-  ThikrItem(
-    id: 'p_3',
-    category: 'أذكار بعد الصلاة',
-    text: 'الحمد لله.',
-    targetCount: 33,
-  ),
-  ThikrItem(
-    id: 'p_4',
-    category: 'أذكار بعد الصلاة',
-    text: 'الله أكبر.',
-    targetCount: 33,
-  ),
-  ThikrItem(
-    id: 'd_1',
-    category: 'أدعية واستغفار',
-    text: 'ربنا آتنا في الدنيا حسنة وفي الآخرة حسنة وقنا عذاب النار.',
-    targetCount: 3,
-  ),
-  ThikrItem(
-    id: 'd_2',
-    category: 'أدعية واستغفار',
-    text: 'اللهم إني أسألك الهدى والتقى والعفاف والغنى.',
-    targetCount: 3,
-  ),
-  ThikrItem(
-    id: 0 as String? ?? 'd_3',
-    category: 'أدعية واستغفار',
-    text: 'لا إله إلا أنت سبحانك إني كنت من الظالمين.',
-    targetCount: 3,
-  ),
-];
-
-// تصحيح معرّف الذكر الثالث في الأدعية
-const List<ThikrItem> kCleanThikrItems = [
   ThikrItem(
     id: 'm_1',
     category: 'أذكار الصباح',
@@ -824,10 +727,10 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
       (Prayer.isha, pt.isha),
     ];
 
-    final Color warmBg = const Color(0xFFF6F1E7);
-    final Color cardBg = const Color(0xFFFFFCF6);
-    final Color primary = const Color(0xFF235347);
-    final Color ink = const Color(0xFF1E2421);
+    const Color warmBg = Color(0xFFF6F1E7);
+    const Color cardBg = Color(0xFFFFFCF6);
+    const Color primary = Color(0xFF235347);
+    const Color ink = Color(0xFF1E2421);
 
     return Scaffold(
       backgroundColor: warmBg,
@@ -836,11 +739,13 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
         elevation: 0,
         title: Text(
           'مواقيت الأذان — ${_selectedCity.name}',
-          style: TextStyle(color: ink, fontWeight: FontWeight.bold, fontSize: 18),
+          style:
+              const TextStyle(color: ink, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         actions: [
           IconButton(
-            tooltip: _azanAlertEnabled ? 'تنبيه الأذان مفعّل' : 'تنبيه الأذان متوقف',
+            tooltip:
+                _azanAlertEnabled ? 'تنبيه الأذان مفعّل' : 'تنبيه الأذان متوقف',
             icon: Icon(
               _azanAlertEnabled
                   ? Icons.notifications_active
@@ -854,7 +759,7 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
           ),
           IconButton(
             tooltip: 'تغيير المدينة وطريقة الحساب',
-            icon: Icon(Icons.tune, color: primary),
+            icon: const Icon(Icons.tune, color: primary),
             onPressed: _openLocationAndMethodSheet,
           ),
         ],
@@ -921,9 +826,7 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
                 color: isNext ? primary.withValues(alpha: 0.12) : cardBg,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isNext
-                      ? primary
-                      : ink.withValues(alpha: 0.12),
+                  color: isNext ? primary : ink.withValues(alpha: 0.12),
                   width: isNext ? 1.5 : 1,
                 ),
               ),
@@ -1029,7 +932,7 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
                     ),
                     const SizedBox(height: 14),
                     DropdownButtonFormField<String>(
-                      value: tempMethod,
+                      initialValue: tempMethod,
                       decoration: const InputDecoration(
                         labelText: 'طريقة الحساب',
                         border: OutlineInputBorder(),
@@ -1292,7 +1195,6 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
     final int startIndex = (_currentPage - 1).clamp(0, totalPages - 1);
     final int remainingBeforeLast = (totalPages - 1) - startIndex;
 
-    // ترتيب الصفحات بحيث السحب من اليسار إلى اليمين يتقدم ومن اليمين إلى اليسار يرجع
     final List<Widget> flipChildren = List.generate(
       remainingBeforeLast,
       (offset) {
@@ -1325,7 +1227,7 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // تحريك الورقة عبر PageFlipWidget فقط مع اتجاه السحب: يسار->يمين تقدم، يمين->يسار رجوع
+                  // تحريك الورقة عبر PageFlipWidget فقط: سحب من اليسار لليمين تقدم، ومن اليمين لليسار رجوع
                   Directionality(
                     textDirection: TextDirection.ltr,
                     child: PageFlipWidget(
@@ -1691,11 +1593,13 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('موضع الختمة الحالي: صفحة $_currentPage من $totalPages ($khatmaPercent%)'),
+                Text(
+                    'موضع الختمة الحالي: صفحة $_currentPage من $totalPages ($khatmaPercent%)'),
                 const SizedBox(height: 4),
                 Text('الورد اليومي: $_wirdReadToday / $tempGoal صفحة'),
                 const SizedBox(height: 4),
-                Text('الأيام المتبقية لإتمام الختمة تقريباً: $estimatedDays يوم'),
+                Text(
+                    'الأيام المتبقية لإتمام الختمة تقريباً: $estimatedDays يوم'),
                 const SizedBox(height: 10),
                 Slider(
                   min: 1,
@@ -2010,7 +1914,6 @@ class MushafSingleSheet extends StatelessWidget {
   }
 }
 
-/// إطار قرآني مزخرف حقيقي يحافظ على «خطة الملك» (مربع السورة يمين، مربع الجزء يسار، ووصل الإطار بينهما)
 class _AuthenticQuranicFramePainter extends CustomPainter {
   final Color outerColor;
   final Color innerColor;
@@ -2085,7 +1988,6 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
 
     canvas.drawPath(outerPath, outerPaint);
 
-    // وصل خط الإطار العلوي بين مربع السورة ومربع الجزء مع معين زخرفي في المنتصف
     final double bridgeY = outer.top;
     canvas.drawLine(
       Offset(surahRect.left, bridgeY),
@@ -2104,7 +2006,6 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
     canvas.drawRect(mid, midPaint);
     canvas.drawRect(inner, innerPaint);
 
-    // زخارف ركنية متناظرة في الزوايا الأربع
     _drawCornerOrnament(
       canvas: canvas,
       corner: outer.topLeft,
@@ -2142,7 +2043,6 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
       fillColor: paperColor,
     );
 
-    // زخارف وسطية للأضلاع الجانبية والسفلية
     _drawRosetteDiamond(
       canvas: canvas,
       center: Offset(outer.left, outer.center.dy),
@@ -2204,7 +2104,8 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
         ..strokeWidth = 1.6,
     );
 
-    final Offset gemCenter = Offset(corner.dx + dirX * 5.5, corner.dy + dirY * 5.5);
+    final Offset gemCenter =
+        Offset(corner.dx + dirX * 5.5, corner.dy + dirY * 5.5);
     _drawRosetteDiamond(
       canvas: canvas,
       center: gemCenter,
@@ -2468,7 +2369,7 @@ class _AthkarTabState extends State<AthkarTab> {
     }
     if (!mounted) return;
     setState(() {
-      for (final item in kCleanThikrItems) {
+      for (final item in kThikrItems) {
         _counts[item.id] = prefs.getInt('thikr_${item.id}') ?? 0;
       }
     });
@@ -2495,7 +2396,7 @@ class _AthkarTabState extends State<AthkarTab> {
 
   void _resetCategory(String category) {
     setState(() {
-      for (final item in kCleanThikrItems) {
+      for (final item in kThikrItems) {
         if (item.category == category) {
           _counts[item.id] = 0;
           _saveCount(item.id, 0);
@@ -2507,7 +2408,7 @@ class _AthkarTabState extends State<AthkarTab> {
   @override
   Widget build(BuildContext context) {
     final String currentCategory = kThikrCategories[_selectedCategoryIndex];
-    final List<ThikrItem> items = kCleanThikrItems
+    final List<ThikrItem> items = kThikrItems
         .where((item) => item.category == currentCategory)
         .toList();
 
@@ -2597,7 +2498,9 @@ class _AthkarTabState extends State<AthkarTab> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            done ? 'مكتمل' : 'التكرار: $count / ${item.targetCount}',
+                            done
+                                ? 'مكتمل'
+                                : 'التكرار: $count / ${item.targetCount}',
                             style: TextStyle(
                               color: done ? primary : ink.withValues(alpha: 0.72),
                               fontWeight: FontWeight.bold,
@@ -2606,8 +2509,9 @@ class _AthkarTabState extends State<AthkarTab> {
                           ),
                           FilledButton.icon(
                             style: FilledButton.styleFrom(
-                              backgroundColor:
-                                  done ? primary.withValues(alpha: 0.25) : primary,
+                              backgroundColor: done
+                                  ? primary.withValues(alpha: 0.25)
+                                  : primary,
                               foregroundColor: done ? primary : Colors.white,
                             ),
                             onPressed: done ? null : () => _increment(item),
