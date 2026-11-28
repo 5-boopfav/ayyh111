@@ -531,7 +531,6 @@ class MainThreeTabShell extends StatefulWidget {
 }
 
 class _MainThreeTabShellState extends State<MainThreeTabShell> {
-  // 0: الأذان (الواجهة الرئيسية), 1: الختمة / المصحف, 2: الأذكار
   int _selectedTab = 0;
   int _currentMushafPage = 1;
   int _dailyWirdGoal = 20;
@@ -875,7 +874,7 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.auto_stories, color: primary, size: 22),
+                  const Icon(Icons.auto_stories, color: primary, size: 22),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -887,7 +886,7 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
                       ),
                     ),
                   ),
-                  Icon(Icons.chevron_left, color: primary),
+                  const Icon(Icons.chevron_left, color: primary),
                 ],
               ),
             ),
@@ -1331,7 +1330,6 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // تحريك الورقة عبر PageFlipWidget فقط: سحب من اليسار لليمين تقدم، ومن اليمين لليسار رجوع بانسيابية «نقطة التاج»
                 Directionality(
                   textDirection: TextDirection.ltr,
                   child: PageFlipWidget(
@@ -1351,7 +1349,6 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
                     onDragEnd: _saveState,
                     onTap: _toggleBookmark,
                   ),
-                // العلامة في الموضع المحدد بالمربع البرتقالي بجانب الجزء
                 Positioned(
                   top: 3,
                   left: bookmarkRightOfJuzLeft,
@@ -1386,7 +1383,6 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
                     ],
                   ),
                 ),
-                // قائمة التنقل والفهرس والورد المدمجة تظهر وتختفي معاً بنقرة واحدة
                 if (_showBottomBar)
                   Positioned(
                     left: 8,
@@ -1985,7 +1981,6 @@ class MushafSingleSheet extends StatelessWidget {
             juzLabel: juzTitle,
             wirdRatio: wirdRatio,
           ),
-          // الآيات تملأ كامل مساحة الإطار دون أي مساحة خارجية
           child: Padding(
             padding: const EdgeInsets.fromLTRB(10, 32, 10, 10),
             child: SizedBox.expand(
@@ -2127,7 +2122,6 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
     canvas.drawRect(mid, midPaint);
     canvas.drawRect(inner, innerPaint);
 
-    // مؤشر تقدم هادئ للورد اليومي على الحافة السفلية للإطار
     final double barW = (inner.width * 0.42) * wirdRatio.clamp(0.0, 1.0);
     if (barW > 1) {
       canvas.drawLine(
@@ -2545,8 +2539,8 @@ class _AthkarTabState extends State<AthkarTab> {
 
   int _suggestCategoryIndexByHour() {
     final int hour = DateTime.now().hour;
-    if (hour >= 4 && hour < 12) return 0; // أذكار الصباح
-    if (hour >= 15 && hour < 21) return 1; // أذكار المساء
+    if (hour >= 4 && hour < 12) return 0;
+    if (hour >= 15 && hour < 21) return 1;
     return 0;
   }
 
@@ -2708,7 +2702,7 @@ class _AthkarTabState extends State<AthkarTab> {
                           Text(
                             item.title,
                             textAlign: TextAlign.center,
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: primary,
                               fontSize: 13.5,
                               fontWeight: FontWeight.bold,
@@ -2735,11 +2729,18 @@ class _AthkarTabState extends State<AthkarTab> {
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
+                          const SizedBox.expand(
+                            child: CircularProgressIndicator(
+                              value: 1.0,
+                              strokeWidth: 11,
+                              color: ringTrack,
+                            ),
+                          ),
                           SizedBox.expand(
                             child: CircularProgressIndicator(
                               value: ringProgress,
                               strokeWidth: 11,
-                              backgroundColor: ringTrack,
+                              backgroundColor: Colors.transparent,
                               valueColor:
                                   const AlwaysStoppedAnimation<Color>(primary),
                             ),
