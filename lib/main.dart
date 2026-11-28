@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:adhan/adhan.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:page_flip/page_flip.dart';
@@ -24,7 +26,7 @@ class BahmadApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.light,
-        colorSchemeSeed: const Color(0xFF235347),
+        colorSchemeSeed: const Color(0xFF1B6B88),
       ),
       home: const Directionality(
         textDirection: TextDirection.rtl,
@@ -32,6 +34,212 @@ class BahmadApp extends StatelessWidget {
       ),
     );
   }
+}
+
+/// مولّد صوتي داخلي بدون الحاجة لملفات خارجية لتشغيل صوت قلب الورق والتسبيح
+class SubtleAudioEffects {
+  SubtleAudioEffects._();
+
+  static final AudioPlayer _pageFlipPlayer = AudioPlayer();
+  static final AudioPlayer _tapPlayer = AudioPlayer();
+  static bool _configured = false;
+
+  static Future<void> _ensureConfigured() async {
+    if (_configured) return;
+    _configured = true;
+    try {
+      await _pageFlipPlayer.setReleaseMode(ReleaseMode.stop);
+      await _tapPlayer.setReleaseMode(ReleaseMode.stop);
+    } catch (_) {}
+  }
+
+  static Uint8List _buildSoftToneWav({
+    required double startFreq,
+    required double endFreq,
+    required int durationMs,
+    required double peakAmplitude,
+  }) {
+    const int sampleRate = 22050;
+    final int numSamples =
+        math.max(200, ((sampleRate * durationMs) / 1000).round());
+    final int dataSize = numSamples * 2;
+    final ByteData data = ByteData(44 + dataSize);
+
+    void writeAscii(int offset, String s) {
+      for (int i = 0; i < s.length; i++) {
+        data.setUint8(offset + i, s.codeUnitAt(i));
+      }
+    }
+
+    writeAscii(0, 'RIFF');
+    data.setUint32(4, 36 + dataSize, Endian.little);
+    writeAscii(8, 'WAVE');
+    writeAscii(12, 'fmt ');
+    data.setUint32(16, 16, Endian.little);
+    data.setUint16(20, 1, Endian.little); // PCM
+    data.setUint16(22, 1, Endian.little); // Mono
+    data.setUint32(24, sampleRate, Endian.little);
+    data.setUint32(28, sampleRate * 2, Endian.little);
+    data.setUint16(32, 2, Endian.little);
+    data.setUint16(34, 16, Endian.little);
+    writeAscii(36, 'data');
+    data.setUint32(40, dataSize, Endian.little);
+
+    double phase = 0.0;
+    for (int i = 0; i < numSamples; i++) {
+      final double t = i / numSamples;
+      final double env = math.sin(t * math.pi) * (1.0 - t * 0.45);
+      final double freq = startFreq + (endFreq - startFreq) * t;
+      phase += (2.0 * math.pi * freq) / sampleRate;
+
+      // مزيج ناعم من موجة جيبية مع حفيف ورقي خفيف جداً
+      final double harmonic = math.sin(phase) * 0.72 +
+          math.sin(phase * 2.0 + 0.4) * 0.16 +
+          math.cos(phase * 3.1) * 0.12;
+      final double sampleVal = (harmonic * env * peakAmplitude).clamp(-1.0, 1.0);
+      data.setInt16(44 + i * 2, (sampleVal * 32767).round(), Endian.little);
+    }
+
+    return data.buffer.asUint8List();
+  }
+
+  static Future<void> playPageTurn({required bool enabled}) async {
+    if (!enabled) return;
+    await _ensureConfigured();
+    try {
+      final bytes = _buildSoftToneWav(
+        startFreq: 260,
+        endFreq: 165,
+        durationMs: 115,
+        peakAmplitude: 0.24,
+      );
+      await _pageFlipPlayer.stop();
+      await _pageFlipPlayer.play(BytesSource(bytes));
+    } catch (_) {}
+  }
+
+  static Future<void> playTap({
+    required bool enabled,
+    bool completed = false,
+  }) async {
+    if (!enabled) return;
+    await _ensureConfigured();
+    try {
+      final bytes = _buildSoftToneWav(
+        startFreq: completed ? 520 : 390,
+        endFreq: completed ? 690 : 310,
+        durationMs: completed ? 140 : 65,
+        peakAmplitude: completed ? 0.25 : 0.18,
+      );
+      await _tapPlayer.stop();
+      await _tapPlayer.play(BytesSource(bytes));
+    } catch (_) {}
+  }
+}
+
+/// خلفية روحانية هادئة منخفضة التباين مستوحاة من الطراز الإسلامي والورق المريح
+class SpiritualCalmBackground extends StatelessWidget {
+  final Color baseColor;
+  final Color accentColor;
+  final Widget child;
+
+  const SpiritualCalmBackground({
+    super.key,
+    required this.baseColor,
+    required this.accentColor,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color.alphaBlend(
+                accentColor.withValues(alpha: 0.05), baseColor),
+            baseColor,
+            Color.alphaBlend(
+                accentColor.withValues(alpha: 0.08), baseColor),
+          ],
+        ),
+      ),
+      child: CustomPaint(
+        painter: _SpiritualMotifPainter(
+          accent: accentColor.withValues(alpha: 0.055),
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _SpiritualMotifPainter extends CustomPainter {
+  final Color accent;
+
+  _SpiritualMotifPainter({required this.accent});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = accent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.1;
+
+    final double topCenterX = size.width * 0.5;
+    const double archTopY = 24.0;
+    final double archWidth = math.min(size.width * 0.72, 290.0);
+
+    // قوس محرابي هادئ في أعلى الخلفية
+    final Path archPath = Path()
+      ..moveTo(topCenterX - archWidth * 0.5, archTopY + 130)
+      ..quadraticBezierTo(
+        topCenterX - archWidth * 0.52,
+        archTopY + 35,
+        topCenterX,
+        archTopY,
+      )
+      ..quadraticBezierTo(
+        topCenterX + archWidth * 0.52,
+        archTopY + 35,
+        topCenterX + archWidth * 0.5,
+        archTopY + 130,
+      );
+    canvas.drawPath(archPath, paint);
+
+    // نجمة هندسية إسلامية خفيفة في المنتصف
+    final Offset center = Offset(size.width * 0.5, size.height * 0.52);
+    const double rOuter = 74.0;
+    const double rInner = 42.0;
+
+    for (int rot = 0; rot < 2; rot++) {
+      final double baseAngle = rot * (math.pi / 4.0);
+      final Path star = Path();
+      for (int i = 0; i < 8; i++) {
+        final double angle = baseAngle + (i * math.pi / 4.0);
+        final double r = i.isEven ? rOuter : rInner;
+        final Offset pt = Offset(
+          center.dx + math.cos(angle) * r,
+          center.dy + math.sin(angle) * r,
+        );
+        if (i == 0) {
+          star.moveTo(pt.dx, pt.dy);
+        } else {
+          star.lineTo(pt.dx, pt.dy);
+        }
+      }
+      star.close();
+      canvas.drawPath(star, paint);
+    }
+
+    canvas.drawCircle(center, 22.0, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SpiritualMotifPainter oldDelegate) =>
+      oldDelegate.accent != accent;
 }
 
 class CityPreset {
@@ -129,6 +337,15 @@ String _methodLabel(String key) {
   }
 }
 
+String _toArabicIndicDigits(int number) {
+  const digits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  return number
+      .toString()
+      .split('')
+      .map((ch) => digits[int.parse(ch)])
+      .join();
+}
+
 class SurahInfo {
   final int number;
   final String name;
@@ -171,15 +388,15 @@ class PageThemePreset {
 
 const List<PageThemePreset> kPageThemePresets = [
   PageThemePreset(
+      id: 'mushaf_blue', name: 'أزرق المصحف', hue: 196.0, shade: 0.08),
+  PageThemePreset(
       id: 'classic_cream', name: 'ورقي كلاسيكي', hue: 38.0, shade: 0.14),
   PageThemePreset(
-      id: 'warm_ivory', name: 'عاجي دافئ', hue: 30.0, shade: 0.24),
+      id: 'sage_calm', name: 'زيتوني هادئ', hue: 152.0, shade: 0.16),
   PageThemePreset(
-      id: 'sage_calm', name: 'زيتوني هادئ', hue: 92.0, shade: 0.22),
+      id: 'warm_ivory', name: 'عاجي دافئ', hue: 30.0, shade: 0.22),
   PageThemePreset(
-      id: 'sky_mist', name: 'سماوي لطيف', hue: 202.0, shade: 0.20),
-  PageThemePreset(
-      id: 'sand_stone', name: 'رملي مريح', hue: 46.0, shade: 0.36),
+      id: 'sand_stone', name: 'رملي مريح', hue: 46.0, shade: 0.32),
 ];
 
 const List<SurahInfo> kSurahs = [
@@ -339,6 +556,7 @@ class PageThemePalette {
   final Color accent;
   final Color outerFrame;
   final Color innerFrame;
+  final Color frameFill;
 
   const PageThemePalette({
     required this.background,
@@ -347,6 +565,7 @@ class PageThemePalette {
     required this.accent,
     required this.outerFrame,
     required this.innerFrame,
+    required this.frameFill,
   });
 
   factory PageThemePalette.fromHueAndShade({
@@ -356,23 +575,24 @@ class PageThemePalette {
     final double h = hue % 360.0;
     final double s = shade.clamp(0.0, 1.0);
 
-    final double paperLightness = ui.lerpDouble(0.975, 0.80, s)!;
-    final double paperSat = ui.lerpDouble(0.28, 0.48, s)!;
+    final double paperLightness = ui.lerpDouble(0.992, 0.85, s)!;
+    final double paperSat = ui.lerpDouble(0.10, 0.36, s)!;
 
-    final double bgLightness = ui.lerpDouble(0.945, 0.74, s)!;
-    final double bgSat = ui.lerpDouble(0.24, 0.42, s)!;
+    final double bgLightness = ui.lerpDouble(0.96, 0.78, s)!;
+    final double bgSat = ui.lerpDouble(0.18, 0.38, s)!;
 
     final Color paper =
         HSLColor.fromAHSL(1.0, h, paperSat, paperLightness).toColor();
     final Color background =
         HSLColor.fromAHSL(1.0, h, bgSat, bgLightness).toColor();
 
-    final double inkLightness = ui.lerpDouble(0.16, 0.11, s)!;
-    final Color ink = HSLColor.fromAHSL(1.0, h, 0.22, inkLightness).toColor();
+    final double inkLightness = ui.lerpDouble(0.15, 0.10, s)!;
+    final Color ink = HSLColor.fromAHSL(1.0, h, 0.25, inkLightness).toColor();
 
-    final Color accent = HSLColor.fromAHSL(1.0, h, 0.52, 0.34).toColor();
-    final Color outerFrame = HSLColor.fromAHSL(1.0, h, 0.48, 0.33).toColor();
-    final Color innerFrame = HSLColor.fromAHSL(1.0, h, 0.42, 0.49).toColor();
+    final Color accent = HSLColor.fromAHSL(1.0, h, 0.68, 0.34).toColor();
+    final Color outerFrame = HSLColor.fromAHSL(1.0, h, 0.72, 0.30).toColor();
+    final Color innerFrame = HSLColor.fromAHSL(1.0, h, 0.62, 0.56).toColor();
+    final Color frameFill = HSLColor.fromAHSL(1.0, h, 0.55, 0.84).toColor();
 
     return PageThemePalette(
       background: background,
@@ -381,6 +601,7 @@ class PageThemePalette {
       accent: accent,
       outerFrame: outerFrame,
       innerFrame: innerFrame,
+      frameFill: frameFill,
     );
   }
 }
@@ -535,6 +756,9 @@ class _MainThreeTabShellState extends State<MainThreeTabShell> {
   int _currentMushafPage = 1;
   int _dailyWirdGoal = 20;
   int _wirdReadToday = 0;
+  bool _khatmaControlsVisible = false;
+  bool _soundEnabled = true;
+  bool _vibrationEnabled = true;
 
   @override
   void initState() {
@@ -549,58 +773,111 @@ class _MainThreeTabShellState extends State<MainThreeTabShell> {
       _currentMushafPage = (prefs.getInt('current_page') ?? 1).clamp(1, 604);
       _dailyWirdGoal = prefs.getInt('daily_wird_goal') ?? 20;
       _wirdReadToday = prefs.getInt('wird_read_today') ?? 0;
+      _khatmaControlsVisible = prefs.getBool('show_bottom_bar') ?? false;
+      _soundEnabled = prefs.getBool('app_sound_enabled') ?? true;
+      _vibrationEnabled = prefs.getBool('athkar_vibration') ?? true;
     });
   }
 
-  void _syncKhatmaStats(int page, int readToday, int goal) {
+  void _syncKhatmaStats(
+    int page,
+    int readToday,
+    int goal,
+    bool controlsVisible,
+  ) {
     if (!mounted) return;
     setState(() {
       _currentMushafPage = page;
       _wirdReadToday = readToday;
       _dailyWirdGoal = goal;
+      _khatmaControlsVisible = controlsVisible;
     });
+  }
+
+  Future<void> _setSoundEnabled(bool val) async {
+    setState(() => _soundEnabled = val);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('app_sound_enabled', val);
+    if (val) {
+      await SubtleAudioEffects.playTap(enabled: true);
+    }
+  }
+
+  Future<void> _setVibrationEnabled(bool val) async {
+    setState(() => _vibrationEnabled = val);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('athkar_vibration', val);
+    if (val) {
+      HapticFeedback.selectionClick();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    // شريط التنقل السفلي في الختمة يظهر ويختفي مع شريط التحكم
+    final bool showNavBar = _selectedTab != 1 || _khatmaControlsVisible;
+
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedTab,
-        children: [
-          AdhanHomeTab(
-            khatmaPage: _currentMushafPage,
-            wirdRead: _wirdReadToday,
-            wirdGoal: _dailyWirdGoal,
-            onOpenKhatma: () => setState(() => _selectedTab = 1),
-            onOpenAthkar: () => setState(() => _selectedTab = 2),
-          ),
-          KhatmaMushafTab(
-            onProgressChanged: _syncKhatmaStats,
-          ),
-          const AthkarTab(),
-        ],
+      body: SpiritualCalmBackground(
+        baseColor: const Color(0xFFF6F1E7),
+        accentColor: const Color(0xFF1B6B88),
+        child: IndexedStack(
+          index: _selectedTab,
+          children: [
+            AdhanHomeTab(
+              khatmaPage: _currentMushafPage,
+              wirdRead: _wirdReadToday,
+              wirdGoal: _dailyWirdGoal,
+              soundEnabled: _soundEnabled,
+              vibrationEnabled: _vibrationEnabled,
+              onToggleSound: _setSoundEnabled,
+              onToggleVibration: _setVibrationEnabled,
+              onOpenKhatma: () => setState(() => _selectedTab = 1),
+              onOpenAthkar: () => setState(() => _selectedTab = 2),
+            ),
+            KhatmaMushafTab(
+              soundEnabled: _soundEnabled,
+              vibrationEnabled: _vibrationEnabled,
+              onProgressChanged: _syncKhatmaStats,
+            ),
+            AthkarTab(
+              soundEnabled: _soundEnabled,
+              vibrationEnabled: _vibrationEnabled,
+              onToggleSound: _setSoundEnabled,
+              onToggleVibration: _setVibrationEnabled,
+            ),
+          ],
+        ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedTab,
-        onDestinationSelected: (idx) => setState(() => _selectedTab = idx),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.mosque_outlined),
-            selectedIcon: Icon(Icons.mosque),
-            label: 'الأذان',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.menu_book_outlined),
-            selectedIcon: Icon(Icons.menu_book),
-            label: 'الختمة',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.volunteer_activism_outlined),
-            selectedIcon: Icon(Icons.volunteer_activism),
-            label: 'الأذكار',
-          ),
-        ],
-      ),
+      bottomNavigationBar: showNavBar
+          ? NavigationBar(
+              selectedIndex: _selectedTab,
+              onDestinationSelected: (idx) {
+                setState(() => _selectedTab = idx);
+                if (_vibrationEnabled) {
+                  HapticFeedback.selectionClick();
+                }
+                SubtleAudioEffects.playTap(enabled: _soundEnabled);
+              },
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.mosque_outlined),
+                  selectedIcon: Icon(Icons.mosque),
+                  label: 'الأذان',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.menu_book_outlined),
+                  selectedIcon: Icon(Icons.menu_book),
+                  label: 'الختمة',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.volunteer_activism_outlined),
+                  selectedIcon: Icon(Icons.volunteer_activism),
+                  label: 'الأذكار',
+                ),
+              ],
+            )
+          : null,
     );
   }
 }
@@ -609,6 +886,10 @@ class AdhanHomeTab extends StatefulWidget {
   final int khatmaPage;
   final int wirdRead;
   final int wirdGoal;
+  final bool soundEnabled;
+  final bool vibrationEnabled;
+  final ValueChanged<bool> onToggleSound;
+  final ValueChanged<bool> onToggleVibration;
   final VoidCallback onOpenKhatma;
   final VoidCallback onOpenAthkar;
 
@@ -617,6 +898,10 @@ class AdhanHomeTab extends StatefulWidget {
     required this.khatmaPage,
     required this.wirdRead,
     required this.wirdGoal,
+    required this.soundEnabled,
+    required this.vibrationEnabled,
+    required this.onToggleSound,
+    required this.onToggleVibration,
     required this.onOpenKhatma,
     required this.onOpenAthkar,
   });
@@ -758,17 +1043,16 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
       return (elapsedSec / totalSec).clamp(0.0, 1.0);
     }();
 
-    const Color warmBg = Color(0xFFF6F1E7);
     const Color cardBg = Color(0xFFFFFCF6);
-    const Color primary = Color(0xFF235347);
+    const Color primary = Color(0xFF1B6B88);
     const Color ink = Color(0xFF1E2421);
 
     final int khatmaPct = ((widget.khatmaPage / 604) * 100).round();
 
     return Scaffold(
-      backgroundColor: warmBg,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: warmBg,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
           'مواقيت الأذان — ${_selectedCity.name}',
@@ -776,6 +1060,25 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
               color: ink, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         actions: [
+          IconButton(
+            tooltip: widget.soundEnabled ? 'الصوت مفعّل' : 'الصوت مكتوم',
+            icon: Icon(
+              widget.soundEnabled ? Icons.volume_up : Icons.volume_off,
+              color: primary,
+            ),
+            onPressed: () => widget.onToggleSound(!widget.soundEnabled),
+          ),
+          IconButton(
+            tooltip:
+                widget.vibrationEnabled ? 'الاهتزاز مفعّل' : 'الاهتزاز متوقف',
+            icon: Icon(
+              widget.vibrationEnabled
+                  ? Icons.vibration
+                  : Icons.phone_android_outlined,
+              color: primary,
+            ),
+            onPressed: () => widget.onToggleVibration(!widget.vibrationEnabled),
+          ),
           IconButton(
             tooltip:
                 _azanAlertEnabled ? 'تنبيه الأذان مفعّل' : 'تنبيه الأذان متوقف',
@@ -788,6 +1091,8 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
             onPressed: () {
               setState(() => _azanAlertEnabled = !_azanAlertEnabled);
               _saveAdhanPrefs();
+              if (widget.vibrationEnabled) HapticFeedback.selectionClick();
+              SubtleAudioEffects.playTap(enabled: widget.soundEnabled);
             },
           ),
           IconButton(
@@ -823,7 +1128,7 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
                     Text(
                       _formatClock(nextTime),
                       style: const TextStyle(
-                        color: Color(0xFFE5F3EE),
+                        color: Color(0xFFE5F3F8),
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
@@ -847,7 +1152,7 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
                     minHeight: 6,
                     backgroundColor: Colors.white.withValues(alpha: 0.22),
                     valueColor:
-                        const AlwaysStoppedAnimation<Color>(Color(0xFFE5F3EE)),
+                        const AlwaysStoppedAnimation<Color>(Color(0xFFE5F3F8)),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -868,7 +1173,7 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: cardBg,
+                color: cardBg.withValues(alpha: 0.94),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: primary.withValues(alpha: 0.22)),
               ),
@@ -897,7 +1202,9 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
               decoration: BoxDecoration(
-                color: isNext ? primary.withValues(alpha: 0.12) : cardBg,
+                color: isNext
+                    ? primary.withValues(alpha: 0.12)
+                    : cardBg.withValues(alpha: 0.94),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: isNext ? primary : ink.withValues(alpha: 0.12),
@@ -935,6 +1242,7 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
                 child: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
                     foregroundColor: primary,
+                    backgroundColor: cardBg.withValues(alpha: 0.85),
                     side: BorderSide(color: primary.withValues(alpha: 0.45)),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
@@ -948,6 +1256,7 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
                 child: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
                     foregroundColor: primary,
+                    backgroundColor: cardBg.withValues(alpha: 0.85),
                     side: BorderSide(color: primary.withValues(alpha: 0.45)),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
@@ -1059,9 +1368,21 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
 }
 
 class KhatmaMushafTab extends StatefulWidget {
-  final void Function(int page, int readToday, int goal)? onProgressChanged;
+  final bool soundEnabled;
+  final bool vibrationEnabled;
+  final void Function(
+    int page,
+    int readToday,
+    int goal,
+    bool controlsVisible,
+  )? onProgressChanged;
 
-  const KhatmaMushafTab({super.key, this.onProgressChanged});
+  const KhatmaMushafTab({
+    super.key,
+    required this.soundEnabled,
+    required this.vibrationEnabled,
+    this.onProgressChanged,
+  });
 
   @override
   State<KhatmaMushafTab> createState() => _KhatmaMushafTabState();
@@ -1077,7 +1398,9 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
   static const Color _softBookmarkRedLight = Color(0xFFD96B6B);
   static const Color _softBookmarkRedDark = Color(0xFF9E3434);
 
-  GlobalKey<PageFlipWidgetState> _pageFlipKey =
+  GlobalKey<PageFlipWidgetState> _portraitFlipKey =
+      GlobalKey<PageFlipWidgetState>();
+  GlobalKey<PageFlipWidgetState> _landscapeSpreadFlipKey =
       GlobalKey<PageFlipWidgetState>();
 
   int _currentPage = 1;
@@ -1089,13 +1412,14 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
   String _lastWirdDate = '';
   double _pageScale = 1.0;
 
-  String _selectedThemeId = 'classic_cream';
-  double _themeHue = 38.0;
-  double _themeShade = 0.14;
+  String _selectedThemeId = 'mushaf_blue';
+  double _themeHue = 196.0;
+  double _themeShade = 0.08;
   bool _showBottomBar = false;
 
   Offset? _pointerDownPos;
   bool _movedDuringTouch = false;
+  Orientation? _lastOrientation;
 
   late final List<int> _allPageNumbers =
       List<int>.generate(totalPages, (index) => index + 1);
@@ -1122,20 +1446,25 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
           (prefs.getDouble('ribbon_drop_ratio') ?? 0.34).clamp(0.14, 0.78);
       _pageScale = (prefs.getDouble('page_scale') ?? 1.0).clamp(0.9, 1.25);
       _dailyWirdGoalPages = prefs.getInt('daily_wird_goal') ?? 20;
-      _selectedThemeId = prefs.getString('theme_preset_id') ?? 'classic_cream';
-      _themeHue = (prefs.getDouble('theme_hue') ?? 38.0).clamp(0.0, 360.0);
-      _themeShade = (prefs.getDouble('theme_shade') ?? 0.14).clamp(0.0, 1.0);
+      _selectedThemeId = prefs.getString('theme_preset_id') ?? 'mushaf_blue';
+      _themeHue = (prefs.getDouble('theme_hue') ?? 196.0).clamp(0.0, 360.0);
+      _themeShade = (prefs.getDouble('theme_shade') ?? 0.08).clamp(0.0, 1.0);
       _showBottomBar = prefs.getBool('show_bottom_bar') ?? false;
       _lastWirdDate = today;
       _wirdReadToday = savedWird;
-      _pageFlipKey = GlobalKey<PageFlipWidgetState>();
+      _portraitFlipKey = GlobalKey<PageFlipWidgetState>();
+      _landscapeSpreadFlipKey = GlobalKey<PageFlipWidgetState>();
     });
     _notifyParent();
   }
 
   void _notifyParent() {
-    widget.onProgressChanged
-        ?.call(_currentPage, _wirdReadToday, _dailyWirdGoalPages);
+    widget.onProgressChanged?.call(
+      _currentPage,
+      _wirdReadToday,
+      _dailyWirdGoalPages,
+      _showBottomBar,
+    );
   }
 
   String _todayKey() {
@@ -1189,15 +1518,21 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
       _currentPage = clamped;
     });
     _saveState();
+    SubtleAudioEffects.playPageTurn(enabled: widget.soundEnabled);
+    if (widget.vibrationEnabled) {
+      HapticFeedback.lightImpact();
+    }
   }
 
   void _jumpToPage(int page) {
     final int clamped = page.clamp(1, totalPages);
     setState(() {
       _currentPage = clamped;
-      _pageFlipKey = GlobalKey<PageFlipWidgetState>();
+      _portraitFlipKey = GlobalKey<PageFlipWidgetState>();
+      _landscapeSpreadFlipKey = GlobalKey<PageFlipWidgetState>();
     });
     _saveState();
+    SubtleAudioEffects.playPageTurn(enabled: widget.soundEnabled);
   }
 
   void _toggleBookmark() {
@@ -1205,6 +1540,8 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
       _bookmarkedPage = _bookmarkedPage == _currentPage ? null : _currentPage;
     });
     _saveState();
+    if (widget.vibrationEnabled) HapticFeedback.selectionClick();
+    SubtleAudioEffects.playTap(enabled: widget.soundEnabled);
   }
 
   void _toggleSecondaryBookmark() {
@@ -1213,6 +1550,8 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
           _secondaryBookmarkPage == _currentPage ? null : _currentPage;
     });
     _saveState();
+    if (widget.vibrationEnabled) HapticFeedback.selectionClick();
+    SubtleAudioEffects.playTap(enabled: widget.soundEnabled);
   }
 
   void _onPointerDown(PointerDownEvent e) {
@@ -1265,7 +1604,7 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
     return res;
   }
 
-  Widget _buildSheetForPage(int pageNumber, PageThemePalette palette) {
+  Widget _buildSingleSheet(int pageNumber, PageThemePalette palette) {
     return MushafSingleSheet(
       pageNumber: pageNumber,
       surahName: _surahForPage(pageNumber).name,
@@ -1277,6 +1616,34 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
     );
   }
 
+  /// بناء ورقة مزدوجة من صفحتين متقابلتين في العرض الأفقي (اليمين واليسار حسب القراءة العربية)
+  Widget _buildLandscapeSpread(
+    int rightPage,
+    int? leftPage,
+    PageThemePalette palette,
+  ) {
+    return Container(
+      color: palette.background,
+      child: Row(
+        textDirection: TextDirection.rtl,
+        children: [
+          Expanded(
+            child: _buildSingleSheet(rightPage, palette),
+          ),
+          Container(
+            width: 3,
+            color: palette.outerFrame.withValues(alpha: 0.45),
+          ),
+          Expanded(
+            child: leftPage != null
+                ? _buildSingleSheet(leftPage, palette)
+                : Container(color: palette.paper),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final PageThemePalette palette = PageThemePalette.fromHueAndShade(
@@ -1284,39 +1651,30 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
       shade: _themeShade,
     );
 
+    final Orientation orientation = MediaQuery.of(context).orientation;
+    final bool isLandscape = orientation == Orientation.landscape;
+
+    if (_lastOrientation != null && _lastOrientation != orientation) {
+      _portraitFlipKey = GlobalKey<PageFlipWidgetState>();
+      _landscapeSpreadFlipKey = GlobalKey<PageFlipWidgetState>();
+    }
+    _lastOrientation = orientation;
+
     final bool hasBookmarkOnCurrent = _bookmarkedPage == _currentPage;
     final bool hasSecondaryOnCurrent = _secondaryBookmarkPage == _currentPage;
 
-    const double juzBoxWidth = 114.0;
-    const double bookmarkRightOfJuzLeft = 16.0 + juzBoxWidth + 4.0;
-
-    final int startIndex =
-        kCrownPointEnabled ? 0 : (_currentPage - 1).clamp(0, totalPages - 1);
-    final int remainingBeforeLast = (totalPages - 1) - startIndex;
-
-    final List<Widget> flipChildren = List.generate(
-      remainingBeforeLast,
-      (offset) {
-        final int pageNum = _allPageNumbers[startIndex + offset];
-        return NotificationListener<ScrollNotification>(
-          onNotification: (_) {
-            if (pageNum != _currentPage) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) _onPageChanged(pageNum);
-              });
-            }
-            return false;
-          },
-          child: _buildSheetForPage(pageNum, palette),
-        );
-      },
-    );
+    const double juzBoxWidth = 116.0;
+    const double bookmarkBesideJuzLeft = 22.0 + juzBoxWidth + 4.0;
 
     return Scaffold(
       backgroundColor: palette.paper,
       body: LayoutBuilder(
         builder: (context, constraints) {
           final double height = constraints.maxHeight;
+
+          final Widget flipBookWidget = isLandscape
+              ? _buildLandscapeFlipBook(palette)
+              : _buildPortraitFlipBook(palette);
 
           return Listener(
             behavior: HitTestBehavior.translucent,
@@ -1330,15 +1688,7 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                Directionality(
-                  textDirection: TextDirection.ltr,
-                  child: PageFlipWidget(
-                    key: _pageFlipKey,
-                    backgroundColor: palette.paper,
-                    lastPage: _buildSheetForPage(totalPages, palette),
-                    children: flipChildren,
-                  ),
-                ),
+                flipBookWidget,
                 if (hasBookmarkOnCurrent)
                   _RedBookmarkCordOverlay(
                     pageHeight: height,
@@ -1351,7 +1701,7 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
                   ),
                 Positioned(
                   top: 3,
-                  left: bookmarkRightOfJuzLeft,
+                  left: bookmarkBesideJuzLeft,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1359,7 +1709,7 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
                         icon: Icons.bookmark,
                         color: hasBookmarkOnCurrent
                             ? _softBookmarkRed
-                            : palette.ink.withValues(alpha: 0.82),
+                            : palette.outerFrame,
                         bgColor: palette.paper,
                         borderColor: const Color(0xFFE67E22),
                         tooltip: hasBookmarkOnCurrent
@@ -1391,6 +1741,7 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
                     child: _FloatingBottomBar(
                       palette: palette,
                       currentPage: _currentPage,
+                      isLandscapeSpread: isLandscape,
                       hasSecondaryBookmark: hasSecondaryOnCurrent,
                       secondaryBookmarkPage: _secondaryBookmarkPage,
                       wirdRead: _wirdReadToday,
@@ -1411,6 +1762,84 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  /// تقليب الورقة الواحدة في الوضع الطولي
+  Widget _buildPortraitFlipBook(PageThemePalette palette) {
+    final int startIndex =
+        kCrownPointEnabled ? 0 : (_currentPage - 1).clamp(0, totalPages - 1);
+    final int remainingBeforeLast = (totalPages - 1) - startIndex;
+
+    final List<Widget> flipChildren = List.generate(
+      remainingBeforeLast,
+      (offset) {
+        final int pageNum = _allPageNumbers[startIndex + offset];
+        return NotificationListener<ScrollNotification>(
+          onNotification: (_) {
+            if (pageNum != _currentPage) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _onPageChanged(pageNum);
+              });
+            }
+            return false;
+          },
+          child: _buildSingleSheet(pageNum, palette),
+        );
+      },
+    );
+
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: PageFlipWidget(
+        key: _portraitFlipKey,
+        backgroundColor: palette.paper,
+        lastPage: _buildSingleSheet(totalPages, palette),
+        children: flipChildren,
+      ),
+    );
+  }
+
+  /// تقليب الصفحتين المتقابلتين معاً في الوضع الأفقي
+  Widget _buildLandscapeFlipBook(PageThemePalette palette) {
+    final List<(int right, int? left)> spreads = [];
+    for (int p = 1; p <= totalPages; p += 2) {
+      spreads.add((p, p + 1 <= totalPages ? p + 1 : null));
+    }
+
+    final int currentSpreadIdx = ((_currentPage - 1) ~/ 2).clamp(0, spreads.length - 1);
+    final int startSpread = kCrownPointEnabled ? 0 : currentSpreadIdx;
+    final int lastSpreadIdx = spreads.length - 1;
+
+    final List<Widget> spreadWidgets = List.generate(
+      math.max(0, lastSpreadIdx - startSpread),
+      (offset) {
+        final int idx = startSpread + offset;
+        final (int rPage, int? lPage) = spreads[idx];
+        return NotificationListener<ScrollNotification>(
+          onNotification: (_) {
+            if (_currentPage != rPage && _currentPage != lPage) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _onPageChanged(rPage);
+              });
+            }
+            return false;
+          },
+          child: _buildLandscapeSpread(rPage, lPage, palette),
+        );
+      },
+    );
+
+    final (int lastR, int? lastL) = spreads.last;
+
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: PageFlipWidget(
+        key: _landscapeSpreadFlipKey,
+        backgroundColor: palette.background,
+        lastPage: _buildLandscapeSpread(lastR, lastL, palette),
+        children: spreadWidgets,
       ),
     );
   }
@@ -1822,15 +2251,15 @@ class _TopQuickChip extends StatelessWidget {
       child: Material(
         color: bgColor,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(5),
-          side: BorderSide(color: borderColor, width: 1.4),
+          borderRadius: BorderRadius.circular(4),
+          side: BorderSide(color: borderColor, width: 1.6),
         ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(5),
+          borderRadius: BorderRadius.circular(4),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.all(3),
-            child: Icon(icon, size: 14, color: color),
+            padding: const EdgeInsets.all(2.5),
+            child: Icon(icon, size: 15, color: color),
           ),
         ),
       ),
@@ -1860,7 +2289,7 @@ class _RedBookmarkCordOverlay extends StatelessWidget {
 
     return Positioned(
       top: 0,
-      left: 68,
+      left: 72,
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: onTap,
@@ -1971,18 +2400,21 @@ class MushafSingleSheet extends StatelessWidget {
       child: Container(
         color: palette.paper,
         child: CustomPaint(
-          painter: _AuthenticQuranicFramePainter(
+          painter: _OrnateMushafFramePainter(
             outerColor: palette.outerFrame,
             innerColor: palette.innerFrame,
+            frameFill: palette.frameFill,
             paperColor: palette.paper,
             accentColor: palette.accent,
             inkColor: palette.ink,
-            surahLabel: 'سورة $surahName',
+            surahLabel: 'سُورَةُ $surahName',
             juzLabel: juzTitle,
+            pageLabel: _toArabicIndicDigits(pageNumber),
             wirdRatio: wirdRatio,
           ),
+          // الآيات تملأ كامل مساحة الإطار دون أي هامش خارجي
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 32, 10, 10),
+            padding: const EdgeInsets.fromLTRB(17, 36, 17, 26),
             child: SizedBox.expand(
               child: Image.asset(
                 assetPath,
@@ -2028,292 +2460,313 @@ class MushafSingleSheet extends StatelessWidget {
   }
 }
 
-class _AuthenticQuranicFramePainter extends CustomPainter {
+class _OrnateMushafFramePainter extends CustomPainter {
   final Color outerColor;
   final Color innerColor;
+  final Color frameFill;
   final Color paperColor;
   final Color accentColor;
   final Color inkColor;
   final String surahLabel;
   final String juzLabel;
+  final String pageLabel;
   final double wirdRatio;
 
-  _AuthenticQuranicFramePainter({
+  _OrnateMushafFramePainter({
     required this.outerColor,
     required this.innerColor,
+    required this.frameFill,
     required this.paperColor,
     required this.accentColor,
     required this.inkColor,
     required this.surahLabel,
     required this.juzLabel,
+    required this.pageLabel,
     required this.wirdRatio,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.width <= 32 || size.height <= 32) return;
+    if (size.width <= 40 || size.height <= 40) return;
 
-    const double topInset = 18.0;
-    final Rect outer =
-        Rect.fromLTRB(3, topInset, size.width - 3, size.height - 3);
-    final Rect mid = outer.deflate(3.0);
-    final Rect inner = outer.deflate(6.0);
+    const double topFrameY = 16.0;
+    const double bottomMargin = 14.0;
+    const double bandThickness = 13.0;
 
-    final Paint outerPaint = Paint()
+    final Rect outerRect = Rect.fromLTRB(
+      1.5,
+      topFrameY,
+      size.width - 1.5,
+      size.height - bottomMargin,
+    );
+    final Rect innerRect = outerRect.deflate(bandThickness);
+
+    final Path bandPath = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRect(outerRect)
+      ..addRect(innerRect);
+
+    canvas.drawPath(
+      bandPath,
+      Paint()
+        ..color = frameFill
+        ..style = PaintingStyle.fill,
+    );
+
+    canvas.save();
+    canvas.clipPath(bandPath);
+    _drawRepeatingFloralBand(canvas, outerRect, bandThickness);
+    canvas.restore();
+
+    final Paint heavyBorder = Paint()
       ..color = outerColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
+      ..strokeWidth = 1.8;
 
-    final Paint midPaint = Paint()
-      ..color = innerColor
+    final Paint fineBorder = Paint()
+      ..color = outerColor.withValues(alpha: 0.78)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
+      ..strokeWidth = 0.9;
 
-    final Paint innerPaint = Paint()
-      ..color = outerColor.withValues(alpha: 0.72)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8;
+    canvas.drawRect(outerRect, heavyBorder);
+    canvas.drawRect(outerRect.deflate(2.4), fineBorder);
+    canvas.drawRect(innerRect.inflate(2.4), fineBorder);
+    canvas.drawRect(innerRect, heavyBorder);
 
-    const double boxHeight = 25.0;
-    const double surahBoxWidth = 118.0;
-    const double juzBoxWidth = 114.0;
+    _drawCornerMedallion(canvas, outerRect.topLeft, innerRect.topLeft);
+    _drawCornerMedallion(canvas, outerRect.topRight, innerRect.topRight);
+    _drawCornerMedallion(canvas, outerRect.bottomLeft, innerRect.bottomLeft);
+    _drawCornerMedallion(canvas, outerRect.bottomRight, innerRect.bottomRight);
 
-    final Rect surahRect = Rect.fromLTWH(
-      outer.right - surahBoxWidth - 8,
-      2,
-      surahBoxWidth,
-      boxHeight,
-    );
-    final Rect juzRect = Rect.fromLTWH(
-      outer.left + 8,
-      2,
-      juzBoxWidth,
-      boxHeight,
-    );
-
-    final Path outerPath = Path()
-      ..moveTo(outer.right, outer.bottom)
-      ..lineTo(outer.right, surahRect.bottom)
-      ..lineTo(surahRect.right, surahRect.bottom)
-      ..moveTo(surahRect.left, surahRect.bottom)
-      ..lineTo(juzRect.right, outer.top)
-      ..moveTo(juzRect.left, outer.top)
-      ..lineTo(outer.left, outer.top)
-      ..lineTo(outer.left, outer.bottom)
-      ..lineTo(outer.right, outer.bottom);
-
-    canvas.drawPath(outerPath, outerPaint);
-
-    final double bridgeY = outer.top;
-    canvas.drawLine(
-      Offset(surahRect.left, bridgeY),
-      Offset(juzRect.right, bridgeY),
-      outerPaint,
-    );
-    final double midBridgeX = (surahRect.left + juzRect.right) * 0.5;
-    _drawRosetteDiamond(
-      canvas: canvas,
-      center: Offset(midBridgeX, bridgeY),
-      radius: 3.8,
-      strokeColor: outerColor,
-      fillColor: paperColor,
-    );
-
-    canvas.drawRect(mid, midPaint);
-    canvas.drawRect(inner, innerPaint);
-
-    final double barW = (inner.width * 0.42) * wirdRatio.clamp(0.0, 1.0);
+    final double barW = (innerRect.width * 0.36) * wirdRatio.clamp(0.0, 1.0);
     if (barW > 1) {
       canvas.drawLine(
-        Offset(inner.center.dx - barW * 0.5, inner.bottom),
-        Offset(inner.center.dx + barW * 0.5, inner.bottom),
+        Offset(innerRect.center.dx - barW * 0.5, innerRect.bottom),
+        Offset(innerRect.center.dx + barW * 0.5, innerRect.bottom),
         Paint()
           ..color = accentColor
           ..strokeWidth = 2.0,
       );
     }
 
-    _drawCornerOrnament(
-      canvas: canvas,
-      corner: outer.topLeft,
-      dirX: 1,
-      dirY: 1,
-      outerColor: outerColor,
-      innerColor: innerColor,
-      fillColor: paperColor,
+    const double cartoucheH = 26.0;
+    const double juzW = 116.0;
+    const double surahW = 120.0;
+
+    final Rect juzRect = Rect.fromLTWH(
+      outerRect.left + 20.0,
+      2.0,
+      juzW,
+      cartoucheH,
     );
-    _drawCornerOrnament(
-      canvas: canvas,
-      corner: outer.topRight,
-      dirX: -1,
-      dirY: 1,
-      outerColor: outerColor,
-      innerColor: innerColor,
-      fillColor: paperColor,
-    );
-    _drawCornerOrnament(
-      canvas: canvas,
-      corner: outer.bottomLeft,
-      dirX: 1,
-      dirY: -1,
-      outerColor: outerColor,
-      innerColor: innerColor,
-      fillColor: paperColor,
-    );
-    _drawCornerOrnament(
-      canvas: canvas,
-      corner: outer.bottomRight,
-      dirX: -1,
-      dirY: -1,
-      outerColor: outerColor,
-      innerColor: innerColor,
-      fillColor: paperColor,
+    final Rect surahRect = Rect.fromLTWH(
+      outerRect.right - surahW - 20.0,
+      2.0,
+      surahW,
+      cartoucheH,
     );
 
-    _drawRosetteDiamond(
-      canvas: canvas,
-      center: Offset(outer.left, outer.center.dy),
-      radius: 4.5,
-      strokeColor: outerColor,
-      fillColor: paperColor,
-    );
-    _drawRosetteDiamond(
-      canvas: canvas,
-      center: Offset(outer.right, outer.center.dy),
-      radius: 4.5,
-      strokeColor: outerColor,
-      fillColor: paperColor,
-    );
-    _drawRosetteDiamond(
-      canvas: canvas,
-      center: Offset(outer.center.dx, outer.bottom),
-      radius: 4.5,
-      strokeColor: outerColor,
-      fillColor: paperColor,
-    );
-
-    _drawQuranHeaderBox(
-      canvas: canvas,
-      rect: surahRect,
-      text: surahLabel,
-    );
-    _drawQuranHeaderBox(
+    _drawScallopedCartouche(
       canvas: canvas,
       rect: juzRect,
       text: juzLabel,
+      fontSize: 11.5,
     );
-  }
-
-  void _drawCornerOrnament({
-    required Canvas canvas,
-    required Offset corner,
-    required double dirX,
-    required double dirY,
-    required Color outerColor,
-    required Color innerColor,
-    required Color fillColor,
-  }) {
-    const double arm = 13.0;
-    final Path arch = Path()
-      ..moveTo(corner.dx + dirX * arm, corner.dy)
-      ..quadraticBezierTo(
-        corner.dx + dirX * 4.0,
-        corner.dy + dirY * 4.0,
-        corner.dx,
-        corner.dy + dirY * arm,
-      );
-
-    canvas.drawPath(
-      arch,
-      Paint()
-        ..color = outerColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
-    );
-
-    final Offset gemCenter =
-        Offset(corner.dx + dirX * 4.5, corner.dy + dirY * 4.5);
-    _drawRosetteDiamond(
+    _drawScallopedCartouche(
       canvas: canvas,
-      center: gemCenter,
-      radius: 3.0,
-      strokeColor: innerColor,
-      fillColor: fillColor,
+      rect: surahRect,
+      text: surahLabel,
+      fontSize: 11.5,
+    );
+
+    final double bridgeLeft = juzRect.right + 28.0;
+    final double bridgeRight = surahRect.left - 4.0;
+    if (bridgeRight > bridgeLeft + 12.0) {
+      final Rect bridgeRect = Rect.fromLTRB(
+        bridgeLeft,
+        topFrameY - 4.0,
+        bridgeRight,
+        topFrameY + 4.0,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(bridgeRect, const Radius.circular(4)),
+        Paint()..color = frameFill,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(bridgeRect, const Radius.circular(4)),
+        Paint()
+          ..color = outerColor
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2,
+      );
+      const double step = 10.0;
+      for (double x = bridgeRect.left + 6.0;
+          x < bridgeRect.right - 4.0;
+          x += step) {
+        _drawDiamondRosette(
+          canvas,
+          Offset(x, bridgeRect.center.dy),
+          2.6,
+        );
+      }
+    }
+
+    const double pageBoxW = 78.0;
+    const double pageBoxH = 24.0;
+    final Rect pageRect = Rect.fromCenter(
+      center: Offset(outerRect.center.dx, outerRect.bottom + 2.0),
+      width: pageBoxW,
+      height: pageBoxH,
+    );
+    _drawScallopedCartouche(
+      canvas: canvas,
+      rect: pageRect,
+      text: pageLabel,
+      fontSize: 12.5,
     );
   }
 
-  void _drawRosetteDiamond({
-    required Canvas canvas,
-    required Offset center,
-    required double radius,
-    required Color strokeColor,
-    required Color fillColor,
-  }) {
-    final Path p = Path()
-      ..moveTo(center.dx, center.dy - radius)
-      ..lineTo(center.dx + radius, center.dy)
-      ..lineTo(center.dx, center.dy + radius)
-      ..lineTo(center.dx - radius, center.dy)
+  void _drawRepeatingFloralBand(
+      Canvas canvas, Rect outerRect, double bandThickness) {
+    final Paint scrollPaint = Paint()
+      ..color = outerColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.1;
+
+    final Paint accentDotPaint = Paint()
+      ..color = innerColor
+      ..style = PaintingStyle.fill;
+
+    const double step = 14.0;
+
+    for (double x = outerRect.left; x <= outerRect.right + step; x += step) {
+      final double topY = outerRect.top + bandThickness * 0.5;
+      final double botY = outerRect.bottom - bandThickness * 0.5;
+
+      _drawBandMotif(canvas, Offset(x, topY), scrollPaint, accentDotPaint);
+      _drawBandMotif(canvas, Offset(x, botY), scrollPaint, accentDotPaint);
+    }
+
+    for (double y = outerRect.top; y <= outerRect.bottom + step; y += step) {
+      final double leftX = outerRect.left + bandThickness * 0.5;
+      final double rightX = outerRect.right - bandThickness * 0.5;
+
+      _drawBandMotif(canvas, Offset(leftX, y), scrollPaint, accentDotPaint);
+      _drawBandMotif(canvas, Offset(rightX, y), scrollPaint, accentDotPaint);
+    }
+  }
+
+  void _drawBandMotif(
+    Canvas canvas,
+    Offset center,
+    Paint strokePaint,
+    Paint fillPaint,
+  ) {
+    canvas.drawCircle(center, 4.6, strokePaint);
+    canvas.drawCircle(center, 2.1, fillPaint);
+
+    final Path petal = Path()
+      ..moveTo(center.dx, center.dy - 6.0)
+      ..lineTo(center.dx + 6.0, center.dy)
+      ..lineTo(center.dx, center.dy + 6.0)
+      ..lineTo(center.dx - 6.0, center.dy)
       ..close();
-
-    canvas.drawPath(
-      p,
-      Paint()
-        ..color = fillColor
-        ..style = PaintingStyle.fill,
-    );
-    canvas.drawPath(
-      p,
-      Paint()
-        ..color = strokeColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.25,
-    );
+    canvas.drawPath(petal, strokePaint);
   }
 
-  void _drawQuranHeaderBox({
-    required Canvas canvas,
-    required Rect rect,
-    required String text,
-  }) {
-    final RRect rrect = RRect.fromRectAndRadius(rect, const Radius.circular(6));
-
-    canvas.drawRRect(
-      rrect,
+  void _drawCornerMedallion(Canvas canvas, Offset outerPt, Offset innerPt) {
+    final Offset mid = Offset(
+      (outerPt.dx + innerPt.dx) * 0.5,
+      (outerPt.dy + innerPt.dy) * 0.5,
+    );
+    canvas.drawCircle(
+      mid,
+      6.2,
       Paint()
         ..color = paperColor
         ..style = PaintingStyle.fill,
     );
-
-    canvas.drawRRect(
-      rrect,
+    canvas.drawCircle(
+      mid,
+      6.2,
       Paint()
         ..color = outerColor
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.8,
+        ..strokeWidth = 1.4,
+    );
+    _drawDiamondRosette(canvas, mid, 3.3);
+  }
+
+  void _drawDiamondRosette(Canvas canvas, Offset c, double r) {
+    final Path p = Path()
+      ..moveTo(c.dx, c.dy - r)
+      ..lineTo(c.dx + r, c.dy)
+      ..lineTo(c.dx, c.dy + r)
+      ..lineTo(c.dx - r, c.dy)
+      ..close();
+    canvas.drawPath(p, Paint()..color = outerColor);
+  }
+
+  void _drawScallopedCartouche({
+    required Canvas canvas,
+    required Rect rect,
+    required String text,
+    required double fontSize,
+  }) {
+    final Path shape = _buildCartouchePath(rect);
+
+    canvas.drawPath(
+      shape.shift(const Offset(0, 1.0)),
+      Paint()..color = Colors.black.withValues(alpha: 0.12),
     );
 
-    canvas.drawRRect(
-      rrect.deflate(2.2),
+    canvas.drawPath(
+      shape,
       Paint()
-        ..color = innerColor.withValues(alpha: 0.8)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.8,
+        ..color = frameFill
+        ..style = PaintingStyle.fill,
     );
+    canvas.drawPath(
+      shape,
+      Paint()
+        ..color = outerColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.7,
+    );
+
+    final Path innerShape = _buildCartouchePath(rect.deflate(2.8));
+    canvas.drawPath(
+      innerShape,
+      Paint()
+        ..color = paperColor
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawPath(
+      innerShape,
+      Paint()
+        ..color = outerColor.withValues(alpha: 0.85)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.9,
+    );
+
+    _drawDiamondRosette(
+        canvas, Offset(rect.left + 8.5, rect.center.dy), 2.3);
+    _drawDiamondRosette(
+        canvas, Offset(rect.right - 8.5, rect.center.dy), 2.3);
 
     final TextPainter tp = TextPainter(
       text: TextSpan(
         text: text,
         style: TextStyle(
           color: inkColor,
-          fontSize: 11.5,
+          fontSize: fontSize,
           fontWeight: FontWeight.bold,
         ),
       ),
       textDirection: TextDirection.rtl,
       maxLines: 1,
       ellipsis: '…',
-    )..layout(maxWidth: rect.width - 10);
+    )..layout(maxWidth: rect.width - 22);
 
     tp.paint(
       canvas,
@@ -2324,21 +2777,41 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
     );
   }
 
+  Path _buildCartouchePath(Rect r) {
+    const double notch = 6.0;
+    return Path()
+      ..moveTo(r.left + notch, r.top)
+      ..lineTo(r.right - notch, r.top)
+      ..quadraticBezierTo(r.right - notch, r.top + notch, r.right, r.top + notch)
+      ..lineTo(r.right, r.bottom - notch)
+      ..quadraticBezierTo(
+          r.right - notch, r.bottom - notch, r.right - notch, r.bottom)
+      ..lineTo(r.left + notch, r.bottom)
+      ..quadraticBezierTo(
+          r.left + notch, r.bottom - notch, r.left, r.bottom - notch)
+      ..lineTo(r.left, r.top + notch)
+      ..quadraticBezierTo(r.left + notch, r.top + notch, r.left + notch, r.top)
+      ..close();
+  }
+
   @override
-  bool shouldRepaint(covariant _AuthenticQuranicFramePainter oldDelegate) =>
+  bool shouldRepaint(covariant _OrnateMushafFramePainter oldDelegate) =>
       oldDelegate.outerColor != outerColor ||
       oldDelegate.innerColor != innerColor ||
+      oldDelegate.frameFill != frameFill ||
       oldDelegate.paperColor != paperColor ||
       oldDelegate.accentColor != accentColor ||
       oldDelegate.inkColor != inkColor ||
       oldDelegate.surahLabel != surahLabel ||
       oldDelegate.juzLabel != juzLabel ||
+      oldDelegate.pageLabel != pageLabel ||
       oldDelegate.wirdRatio != wirdRatio;
 }
 
 class _FloatingBottomBar extends StatelessWidget {
   final PageThemePalette palette;
   final int currentPage;
+  final bool isLandscapeSpread;
   final bool hasSecondaryBookmark;
   final int? secondaryBookmarkPage;
   final int wirdRead;
@@ -2355,6 +2828,7 @@ class _FloatingBottomBar extends StatelessWidget {
   const _FloatingBottomBar({
     required this.palette,
     required this.currentPage,
+    required this.isLandscapeSpread,
     required this.hasSecondaryBookmark,
     required this.secondaryBookmarkPage,
     required this.wirdRead,
@@ -2374,6 +2848,7 @@ class _FloatingBottomBar extends StatelessWidget {
     final double ratio =
         wirdGoal > 0 ? (wirdRead / wirdGoal).clamp(0.0, 1.0) : 0.0;
     final int khatmaPct = ((currentPage / 604) * 100).round();
+    final String modeLabel = isLandscapeSpread ? 'صفحتان' : 'ورقة';
 
     return Material(
       elevation: 6,
@@ -2391,7 +2866,7 @@ class _FloatingBottomBar extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  'ص $currentPage • الختمة $khatmaPct% • الورد $wirdRead/$wirdGoal',
+                  'ص $currentPage ($modeLabel) • الختمة $khatmaPct% • الورد $wirdRead/$wirdGoal',
                   style: TextStyle(
                       fontSize: 11.5, color: palette.ink.withValues(alpha: 0.88)),
                 ),
@@ -2518,7 +2993,18 @@ class _BarBtn extends StatelessWidget {
 }
 
 class AthkarTab extends StatefulWidget {
-  const AthkarTab({super.key});
+  final bool soundEnabled;
+  final bool vibrationEnabled;
+  final ValueChanged<bool> onToggleSound;
+  final ValueChanged<bool> onToggleVibration;
+
+  const AthkarTab({
+    super.key,
+    required this.soundEnabled,
+    required this.vibrationEnabled,
+    required this.onToggleSound,
+    required this.onToggleVibration,
+  });
 
   @override
   State<AthkarTab> createState() => _AthkarTabState();
@@ -2527,14 +3013,13 @@ class AthkarTab extends StatefulWidget {
 class _AthkarTabState extends State<AthkarTab> {
   int _selectedCategoryIndex = 0;
   int _itemIndexInCategory = 0;
-  bool _vibrationEnabled = true;
   final Map<String, int> _counts = {};
 
   @override
   void initState() {
     super.initState();
     _selectedCategoryIndex = _suggestCategoryIndexByHour();
-    _loadPrefsAndCounts();
+    _loadCounts();
   }
 
   int _suggestCategoryIndexByHour() {
@@ -2544,17 +3029,15 @@ class _AthkarTabState extends State<AthkarTab> {
     return 0;
   }
 
-  Future<void> _loadPrefsAndCounts() async {
+  Future<void> _loadCounts() async {
     final prefs = await SharedPreferences.getInstance();
     final String today = _todayKey();
     final String savedDate = prefs.getString('athkar_date') ?? today;
-    final bool vib = prefs.getBool('athkar_vibration') ?? true;
     if (savedDate != today) {
       await prefs.setString('athkar_date', today);
     }
     if (!mounted) return;
     setState(() {
-      _vibrationEnabled = vib;
       for (final item in kThikrItems) {
         _counts[item.id] =
             savedDate == today ? (prefs.getInt('thikr_${item.id}') ?? 0) : 0;
@@ -2573,16 +3056,6 @@ class _AthkarTabState extends State<AthkarTab> {
     await prefs.setInt('thikr_$id', value);
   }
 
-  Future<void> _toggleVibration() async {
-    final next = !_vibrationEnabled;
-    setState(() => _vibrationEnabled = next);
-    if (next) {
-      HapticFeedback.selectionClick();
-    }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('athkar_vibration', next);
-  }
-
   void _increment(ThikrItem item) {
     final int current = _counts[item.id] ?? 0;
     if (current >= item.targetCount) return;
@@ -2591,7 +3064,12 @@ class _AthkarTabState extends State<AthkarTab> {
     setState(() => _counts[item.id] = next);
     _saveCount(item.id, next);
 
-    if (_vibrationEnabled) {
+    SubtleAudioEffects.playTap(
+      enabled: widget.soundEnabled,
+      completed: completedNow,
+    );
+
+    if (widget.vibrationEnabled) {
       if (completedNow) {
         HapticFeedback.heavyImpact();
       } else {
@@ -2603,7 +3081,8 @@ class _AthkarTabState extends State<AthkarTab> {
   void _resetCurrentItem(ThikrItem item) {
     setState(() => _counts[item.id] = 0);
     _saveCount(item.id, 0);
-    if (_vibrationEnabled) {
+    SubtleAudioEffects.playTap(enabled: widget.soundEnabled);
+    if (widget.vibrationEnabled) {
       HapticFeedback.selectionClick();
     }
   }
@@ -2621,16 +3100,15 @@ class _AthkarTabState extends State<AthkarTab> {
     final double ringProgress =
         item.targetCount > 0 ? (count / item.targetCount).clamp(0.0, 1.0) : 0.0;
 
-    const Color bg = Color(0xFFF6F1E7);
     const Color card = Color(0xFFFFFCF6);
-    const Color primary = Color(0xFF235347);
-    const Color ringTrack = Color(0xFFDCE7E2);
+    const Color primary = Color(0xFF1B6B88);
+    const Color ringTrack = Color(0xFFDCE7EC);
     const Color ink = Color(0xFF1E2421);
 
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: bg,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
           currentCategory,
@@ -2693,7 +3171,7 @@ class _AthkarTabState extends State<AthkarTab> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: card,
+                        color: card.withValues(alpha: 0.94),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: ink.withValues(alpha: 0.10)),
                       ),
@@ -2803,7 +3281,7 @@ class _AthkarTabState extends State<AthkarTab> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 14, vertical: 8),
                           decoration: BoxDecoration(
-                            color: card,
+                            color: card.withValues(alpha: 0.94),
                             borderRadius: BorderRadius.circular(12),
                             border:
                                 Border.all(color: ink.withValues(alpha: 0.12)),
@@ -2812,15 +3290,47 @@ class _AthkarTabState extends State<AthkarTab> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               InkWell(
-                                onTap: _toggleVibration,
+                                onTap: () =>
+                                    widget.onToggleSound(!widget.soundEnabled),
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
-                                      _vibrationEnabled
+                                      widget.soundEnabled
+                                          ? Icons.volume_up
+                                          : Icons.volume_off,
+                                      color: widget.soundEnabled
+                                          ? primary
+                                          : ink.withValues(alpha: 0.5),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'صوت',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: widget.soundEnabled
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                        color: widget.soundEnabled
+                                            ? primary
+                                            : ink.withValues(alpha: 0.7),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 18),
+                              InkWell(
+                                onTap: () => widget
+                                    .onToggleVibration(!widget.vibrationEnabled),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      widget.vibrationEnabled
                                           ? Icons.vibration
                                           : Icons.phone_android,
-                                      color: _vibrationEnabled
+                                      color: widget.vibrationEnabled
                                           ? primary
                                           : ink.withValues(alpha: 0.5),
                                     ),
@@ -2829,10 +3339,10 @@ class _AthkarTabState extends State<AthkarTab> {
                                       'اهتزاز',
                                       style: TextStyle(
                                         fontSize: 11,
-                                        fontWeight: _vibrationEnabled
+                                        fontWeight: widget.vibrationEnabled
                                             ? FontWeight.bold
                                             : FontWeight.normal,
-                                        color: _vibrationEnabled
+                                        color: widget.vibrationEnabled
                                             ? primary
                                             : ink.withValues(alpha: 0.7),
                                       ),
@@ -2840,7 +3350,7 @@ class _AthkarTabState extends State<AthkarTab> {
                                   ],
                                 ),
                               ),
-                              const SizedBox(width: 22),
+                              const SizedBox(width: 18),
                               InkWell(
                                 onTap: () => _resetCurrentItem(item),
                                 child: Column(
