@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:adhan/adhan.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:page_flip/page_flip.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -387,12 +388,14 @@ class PageThemePalette {
 class ThikrItem {
   final String id;
   final String category;
+  final String title;
   final String text;
   final int targetCount;
 
   const ThikrItem({
     required this.id,
     required this.category,
+    required this.title,
     required this.text,
     required this.targetCount,
   });
@@ -409,96 +412,112 @@ const List<ThikrItem> kThikrItems = [
   ThikrItem(
     id: 'm_1',
     category: 'أذكار الصباح',
+    title: 'سَيِّدُ الِاسْتِغْفَارِ وَالذِّكْرُ',
     text: 'أصبحنا وأصبح الملك لله، والحمد لله، لا إله إلا الله وحده لا شريك له، له الملك وله الحمد وهو على كل شيء قدير.',
     targetCount: 1,
   ),
   ThikrItem(
     id: 'm_2',
     category: 'أذكار الصباح',
+    title: 'ذِكْرُ الصَّبَاحِ',
     text: 'اللهم بك أصبحنا وبك أمسينا وبك نحيا وبك نموت وإليك النشور.',
     targetCount: 1,
   ),
   ThikrItem(
     id: 'm_3',
     category: 'أذكار الصباح',
+    title: 'رِضَا اللَّهِ',
     text: 'رضيت بالله رباً، وبالإسلام ديناً، وبمحمد صلى الله عليه وسلم نبياً.',
     targetCount: 3,
   ),
   ThikrItem(
     id: 'm_4',
     category: 'أذكار الصباح',
+    title: 'تَسْبِيحُ الصَّبَاحِ',
     text: 'سبحان الله وبحمده، عدد خلقه، ورضا نفسه، وزنة عرشه، ومداد كلماته.',
     targetCount: 3,
   ),
   ThikrItem(
     id: 'm_5',
     category: 'أذكار الصباح',
+    title: 'الِاسْتِغْفَارُ الْعَظِيمُ',
     text: 'أستغفر الله العظيم الذي لا إله إلا هو الحي القيوم وأتوب إليه.',
     targetCount: 3,
   ),
   ThikrItem(
     id: 'e_1',
     category: 'أذكار المساء',
+    title: 'ذِكْرُ الْمَسَاءِ',
     text: 'أمسينا وأمسى الملك لله، والحمد لله، لا إله إلا الله وحده لا شريك له، له الملك وله الحمد وهو على كل شيء قدير.',
     targetCount: 1,
   ),
   ThikrItem(
     id: 'e_2',
     category: 'أذكار المساء',
+    title: 'الْمَصِيرُ إِلَى اللَّهِ',
     text: 'اللهم بك أمسينا وبك أصبحنا وبك نحيا وبك نموت وإليك المصير.',
     targetCount: 1,
   ),
   ThikrItem(
     id: 'e_3',
     category: 'أذكار المساء',
+    title: 'كَلِمَاتُ اللَّهِ التَّامَّاتُ',
     text: 'أعوذ بكلمات الله التامات من شر ما خلق.',
     targetCount: 3,
   ),
   ThikrItem(
     id: 'e_4',
     category: 'أذكار المساء',
+    title: 'الْحِفْظُ بِاسْمِ اللَّهِ',
     text: 'بسم الله الذي لا يضر مع اسمه شيء في الأرض ولا في السماء وهو السميع العليم.',
     targetCount: 3,
   ),
   ThikrItem(
     id: 'p_1',
     category: 'أذكار بعد الصلاة',
+    title: 'الِاسْتِغْفَارُ وَالسَّلَامُ',
     text: 'أستغفر الله، أستغفر الله، أستغفر الله. اللهم أنت السلام ومنك السلام، تباركت يا ذا الجلال والإكرام.',
     targetCount: 1,
   ),
   ThikrItem(
     id: 'p_2',
     category: 'أذكار بعد الصلاة',
+    title: 'سُبْحَانَ اللَّهِ',
     text: 'سبحان الله.',
     targetCount: 33,
   ),
   ThikrItem(
     id: 'p_3',
     category: 'أذكار بعد الصلاة',
+    title: 'الْحَمْدُ لِلَّهِ',
     text: 'الحمد لله.',
     targetCount: 33,
   ),
   ThikrItem(
     id: 'p_4',
     category: 'أذكار بعد الصلاة',
+    title: 'اللَّهُ أَكْبَرُ',
     text: 'الله أكبر.',
     targetCount: 33,
   ),
   ThikrItem(
     id: 'd_1',
     category: 'أدعية واستغفار',
+    title: 'حَسَنَةُ الدُّنْيَا وَالْآخِرَةِ',
     text: 'ربنا آتنا في الدنيا حسنة وفي الآخرة حسنة وقنا عذاب النار.',
     targetCount: 3,
   ),
   ThikrItem(
     id: 'd_2',
     category: 'أدعية واستغفار',
+    title: 'الْهُدَى وَالتُّقَى',
     text: 'اللهم إني أسألك الهدى والتقى والعفاف والغنى.',
     targetCount: 3,
   ),
   ThikrItem(
     id: 'd_3',
     category: 'أدعية واستغفار',
+    title: 'تَسْبِيحُ يُونُسَ عَلَيْهِ السَّلَامُ',
     text: 'لا إله إلا أنت سبحانك إني كنت من الظالمين.',
     targetCount: 3,
   ),
@@ -512,7 +531,7 @@ class MainThreeTabShell extends StatefulWidget {
 }
 
 class _MainThreeTabShellState extends State<MainThreeTabShell> {
-  // 0: الأذان (الواجهة الرئيسية), 1: الختمة (المصحف), 2: الأذكار
+  // 0: الأذان (الواجهة الرئيسية), 1: الختمة / المصحف, 2: الأذكار
   int _selectedTab = 0;
   int _currentMushafPage = 1;
   int _dailyWirdGoal = 20;
@@ -655,11 +674,11 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
     await prefs.setBool('adhan_alert', _azanAlertEnabled);
   }
 
-  PrayerTimes _computeTodayPrayerTimes() {
+  PrayerTimes _computeTodayPrayerTimesForDate(DateTime dateTime) {
     final coords = Coordinates(_selectedCity.latitude, _selectedCity.longitude);
     final params = _calculationMethodFromKey(_methodKey);
     params.madhab = Madhab.shafi;
-    final date = DateComponents.from(_now);
+    final date = DateComponents.from(dateTime);
     return PrayerTimes(coords, date, params);
   }
 
@@ -700,25 +719,12 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
 
   @override
   Widget build(BuildContext context) {
-    final PrayerTimes pt = _computeTodayPrayerTimes();
+    final PrayerTimes pt = _computeTodayPrayerTimesForDate(_now);
     Prayer next = pt.nextPrayer();
     DateTime? nextTime = pt.timeForPrayer(next);
+    DateTime? prevTime;
 
-    if (next == Prayer.none || nextTime == null) {
-      final tomorrow = _now.add(const Duration(days: 1));
-      final coords =
-          Coordinates(_selectedCity.latitude, _selectedCity.longitude);
-      final params = _calculationMethodFromKey(_methodKey);
-      params.madhab = Madhab.shafi;
-      final tomorrowPt =
-          PrayerTimes(coords, DateComponents.from(tomorrow), params);
-      next = Prayer.fajr;
-      nextTime = tomorrowPt.fajr;
-    }
-
-    final Duration remaining = nextTime.difference(_now);
-
-    final List<(Prayer, DateTime)> rows = [
+    final List<(Prayer, DateTime)> orderedToday = [
       (Prayer.fajr, pt.fajr),
       (Prayer.sunrise, pt.sunrise),
       (Prayer.dhuhr, pt.dhuhr),
@@ -727,10 +733,38 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
       (Prayer.isha, pt.isha),
     ];
 
+    if (next == Prayer.none || nextTime == null) {
+      final tomorrow = _now.add(const Duration(days: 1));
+      final tomorrowPt = _computeTodayPrayerTimesForDate(tomorrow);
+      next = Prayer.fajr;
+      nextTime = tomorrowPt.fajr;
+      prevTime = pt.isha;
+    } else {
+      final int idx = orderedToday.indexWhere((e) => e.$1 == next);
+      if (idx > 0) {
+        prevTime = orderedToday[idx - 1].$2;
+      } else {
+        final yesterdayPt = _computeTodayPrayerTimesForDate(
+            _now.subtract(const Duration(days: 1)));
+        prevTime = yesterdayPt.isha;
+      }
+    }
+
+    final Duration remaining = nextTime.difference(_now);
+    final double windowProgress = () {
+      if (prevTime == null) return 0.0;
+      final int totalSec = nextTime!.difference(prevTime).inSeconds;
+      if (totalSec <= 0) return 0.0;
+      final int elapsedSec = _now.difference(prevTime).inSeconds;
+      return (elapsedSec / totalSec).clamp(0.0, 1.0);
+    }();
+
     const Color warmBg = Color(0xFFF6F1E7);
     const Color cardBg = Color(0xFFFFFCF6);
     const Color primary = Color(0xFF235347);
     const Color ink = Color(0xFF1E2421);
+
+    final int khatmaPct = ((widget.khatmaPage / 604) * 100).round();
 
     return Scaffold(
       backgroundColor: warmBg,
@@ -739,8 +773,8 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
         elevation: 0,
         title: Text(
           'مواقيت الأذان — ${_selectedCity.name}',
-          style:
-              const TextStyle(color: ink, fontWeight: FontWeight.bold, fontSize: 18),
+          style: const TextStyle(
+              color: ink, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         actions: [
           IconButton(
@@ -797,13 +831,24 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 Text(
                   'المتبقي على الأذان: ${_formatRemaining(remaining)}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: windowProgress,
+                    minHeight: 6,
+                    backgroundColor: Colors.white.withValues(alpha: 0.22),
+                    valueColor:
+                        const AlwaysStoppedAnimation<Color>(Color(0xFFE5F3EE)),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -817,8 +862,38 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
               ],
             ),
           ),
-          const SizedBox(height: 14),
-          ...rows.map((item) {
+          const SizedBox(height: 12),
+          InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: widget.onOpenKhatma,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: primary.withValues(alpha: 0.22)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.auto_stories, color: primary, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'الختمة: صفحة ${widget.khatmaPage} من 604 ($khatmaPct%) • الورد: ${widget.wirdRead}/${widget.wirdGoal}',
+                      style: const TextStyle(
+                        color: ink,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                  ),
+                  Icon(Icons.chevron_left, color: primary),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...orderedToday.map((item) {
             final bool isNext = item.$1 == next;
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
@@ -854,7 +929,7 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
               ),
             );
           }),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           Row(
             children: [
               Expanded(
@@ -866,7 +941,7 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
                   ),
                   onPressed: widget.onOpenKhatma,
                   icon: const Icon(Icons.menu_book),
-                  label: Text('الختمة (ص ${widget.khatmaPage})'),
+                  label: Text('المصحف والختمة (ص ${widget.khatmaPage})'),
                 ),
               ),
               const SizedBox(width: 10),
@@ -996,6 +1071,9 @@ class KhatmaMushafTab extends StatefulWidget {
 class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
   static const int totalPages = 604;
 
+  // «نقطة التاج»: تفعيل سحب الرجوع باليد بانسيابية التقدم
+  static const bool kCrownPointEnabled = true;
+
   static const Color _softBookmarkRed = Color(0xFFC94A4A);
   static const Color _softBookmarkRedLight = Color(0xFFD96B6B);
   static const Color _softBookmarkRedDark = Color(0xFF9E3434);
@@ -1005,6 +1083,7 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
 
   int _currentPage = 1;
   int? _bookmarkedPage;
+  int? _secondaryBookmarkPage;
   double _ribbonDropRatio = 0.34;
   int _dailyWirdGoalPages = 20;
   int _wirdReadToday = 0;
@@ -1018,6 +1097,9 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
 
   Offset? _pointerDownPos;
   bool _movedDuringTouch = false;
+
+  late final List<int> _allPageNumbers =
+      List<int>.generate(totalPages, (index) => index + 1);
 
   @override
   void initState() {
@@ -1036,6 +1118,7 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
     setState(() {
       _currentPage = (prefs.getInt('current_page') ?? 1).clamp(1, totalPages);
       _bookmarkedPage = prefs.getInt('bookmarked_page');
+      _secondaryBookmarkPage = prefs.getInt('secondary_bookmark_page');
       _ribbonDropRatio =
           (prefs.getDouble('ribbon_drop_ratio') ?? 0.34).clamp(0.14, 0.78);
       _pageScale = (prefs.getDouble('page_scale') ?? 1.0).clamp(0.9, 1.25);
@@ -1068,6 +1151,11 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
       await prefs.setInt('bookmarked_page', _bookmarkedPage!);
     } else {
       await prefs.remove('bookmarked_page');
+    }
+    if (_secondaryBookmarkPage != null) {
+      await prefs.setInt('secondary_bookmark_page', _secondaryBookmarkPage!);
+    } else {
+      await prefs.remove('secondary_bookmark_page');
     }
     await prefs.setDouble('ribbon_drop_ratio', _ribbonDropRatio);
     await prefs.setDouble('page_scale', _pageScale);
@@ -1116,6 +1204,14 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
   void _toggleBookmark() {
     setState(() {
       _bookmarkedPage = _bookmarkedPage == _currentPage ? null : _currentPage;
+    });
+    _saveState();
+  }
+
+  void _toggleSecondaryBookmark() {
+    setState(() {
+      _secondaryBookmarkPage =
+          _secondaryBookmarkPage == _currentPage ? null : _currentPage;
     });
     _saveState();
   }
@@ -1177,6 +1273,8 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
       juzTitle: _juzForPage(pageNumber).title,
       palette: palette,
       scale: _pageScale,
+      wirdRead: _wirdReadToday,
+      wirdGoal: _dailyWirdGoalPages,
     );
   }
 
@@ -1188,121 +1286,135 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
     );
 
     final bool hasBookmarkOnCurrent = _bookmarkedPage == _currentPage;
+    final bool hasSecondaryOnCurrent = _secondaryBookmarkPage == _currentPage;
 
     const double juzBoxWidth = 114.0;
-    const double bookmarkRightOfJuzLeft = 16.0 + juzBoxWidth + 6.0;
+    const double bookmarkRightOfJuzLeft = 16.0 + juzBoxWidth + 4.0;
 
-    final int startIndex = (_currentPage - 1).clamp(0, totalPages - 1);
+    final int startIndex =
+        kCrownPointEnabled ? 0 : (_currentPage - 1).clamp(0, totalPages - 1);
     final int remainingBeforeLast = (totalPages - 1) - startIndex;
 
     final List<Widget> flipChildren = List.generate(
       remainingBeforeLast,
       (offset) {
-        final int pageNum = startIndex + offset + 1;
-        if (offset == 1) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _onPageChanged(pageNum);
-          });
-        }
-        return _buildSheetForPage(pageNum, palette);
+        final int pageNum = _allPageNumbers[startIndex + offset];
+        return NotificationListener<ScrollNotification>(
+          onNotification: (_) {
+            if (pageNum != _currentPage) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _onPageChanged(pageNum);
+              });
+            }
+            return false;
+          },
+          child: _buildSheetForPage(pageNum, palette),
+        );
       },
     );
 
     return Scaffold(
-      backgroundColor: palette.background,
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final double height = constraints.maxHeight;
+      backgroundColor: palette.paper,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final double height = constraints.maxHeight;
 
-            return Listener(
-              behavior: HitTestBehavior.translucent,
-              onPointerDown: _onPointerDown,
-              onPointerMove: _onPointerMove,
-              onPointerUp: (_) => _onPointerUp(),
-              onPointerCancel: (_) {
-                _pointerDownPos = null;
-                _movedDuringTouch = false;
-              },
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // تحريك الورقة عبر PageFlipWidget فقط: سحب من اليسار لليمين تقدم، ومن اليمين لليسار رجوع
-                  Directionality(
-                    textDirection: TextDirection.ltr,
-                    child: PageFlipWidget(
-                      key: _pageFlipKey,
-                      backgroundColor: palette.background,
-                      lastPage: _buildSheetForPage(totalPages, palette),
-                      children: flipChildren,
-                    ),
+          return Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: _onPointerDown,
+            onPointerMove: _onPointerMove,
+            onPointerUp: (_) => _onPointerUp(),
+            onPointerCancel: (_) {
+              _pointerDownPos = null;
+              _movedDuringTouch = false;
+            },
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // تحريك الورقة عبر PageFlipWidget فقط: سحب من اليسار لليمين تقدم، ومن اليمين لليسار رجوع بانسيابية «نقطة التاج»
+                Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: PageFlipWidget(
+                    key: _pageFlipKey,
+                    backgroundColor: palette.paper,
+                    lastPage: _buildSheetForPage(totalPages, palette),
+                    children: flipChildren,
                   ),
-                  if (hasBookmarkOnCurrent)
-                    _RedBookmarkCordOverlay(
-                      pageHeight: height,
-                      dropRatio: _ribbonDropRatio,
-                      onDropRatioChanged: (newRatio) {
-                        setState(() => _ribbonDropRatio = newRatio);
-                      },
-                      onDragEnd: _saveState,
-                      onTap: _toggleBookmark,
-                    ),
-                  Positioned(
-                    top: 32,
-                    left: bookmarkRightOfJuzLeft,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _TopQuickChip(
-                          icon: Icons.bookmark,
-                          color: hasBookmarkOnCurrent
-                              ? _softBookmarkRed
-                              : palette.ink.withValues(alpha: 0.78),
-                          bgColor: palette.paper.withValues(alpha: 0.94),
-                          borderColor: palette.outerFrame,
-                          tooltip: hasBookmarkOnCurrent
-                              ? 'إزالة الحبل الأحمر'
-                              : 'إنزال الحبل الأحمر',
-                          onTap: _toggleBookmark,
-                        ),
-                        if (_bookmarkedPage != null &&
-                            !hasBookmarkOnCurrent) ...[
-                          const SizedBox(width: 4),
-                          _TopQuickChip(
-                            icon: Icons.turned_in,
-                            color: _softBookmarkRed,
-                            bgColor: palette.paper.withValues(alpha: 0.94),
-                            borderColor: palette.outerFrame,
-                            tooltip:
-                                'الانتقال إلى الحبل الأحمر (ص $_bookmarkedPage)',
-                            onTap: () => _jumpToPage(_bookmarkedPage!),
-                          ),
-                        ],
-                      ],
-                    ),
+                ),
+                if (hasBookmarkOnCurrent)
+                  _RedBookmarkCordOverlay(
+                    pageHeight: height,
+                    dropRatio: _ribbonDropRatio,
+                    onDropRatioChanged: (newRatio) {
+                      setState(() => _ribbonDropRatio = newRatio);
+                    },
+                    onDragEnd: _saveState,
+                    onTap: _toggleBookmark,
                   ),
-                  if (_showBottomBar)
-                    Positioned(
-                      left: 10,
-                      right: 10,
-                      bottom: 10,
-                      child: _FloatingBottomBar(
-                        palette: palette,
-                        currentPage: _currentPage,
-                        wirdRead: _wirdReadToday,
-                        wirdGoal: _dailyWirdGoalPages,
-                        onOpenSurahs: () => _openSurahs(palette),
-                        onOpenJuz: () => _openJuz(palette),
-                        onOpenWird: _openWird,
-                        onOpenScale: () => _openScale(palette),
-                        onOpenTheme: () => _openThemeCustomizer(palette),
+                // العلامة في الموضع المحدد بالمربع البرتقالي بجانب الجزء
+                Positioned(
+                  top: 3,
+                  left: bookmarkRightOfJuzLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _TopQuickChip(
+                        icon: Icons.bookmark,
+                        color: hasBookmarkOnCurrent
+                            ? _softBookmarkRed
+                            : palette.ink.withValues(alpha: 0.82),
+                        bgColor: palette.paper,
+                        borderColor: const Color(0xFFE67E22),
+                        tooltip: hasBookmarkOnCurrent
+                            ? 'إزالة الحبل الأحمر'
+                            : 'إنزال الحبل الأحمر',
+                        onTap: _toggleBookmark,
                       ),
+                      if (_bookmarkedPage != null &&
+                          !hasBookmarkOnCurrent) ...[
+                        const SizedBox(width: 2),
+                        _TopQuickChip(
+                          icon: Icons.turned_in,
+                          color: _softBookmarkRed,
+                          bgColor: palette.paper,
+                          borderColor: palette.outerFrame,
+                          tooltip:
+                              'الانتقال إلى الحبل الأحمر (ص $_bookmarkedPage)',
+                          onTap: () => _jumpToPage(_bookmarkedPage!),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                // قائمة التنقل والفهرس والورد المدمجة تظهر وتختفي معاً بنقرة واحدة
+                if (_showBottomBar)
+                  Positioned(
+                    left: 8,
+                    right: 8,
+                    bottom: 8,
+                    child: _FloatingBottomBar(
+                      palette: palette,
+                      currentPage: _currentPage,
+                      hasSecondaryBookmark: hasSecondaryOnCurrent,
+                      secondaryBookmarkPage: _secondaryBookmarkPage,
+                      wirdRead: _wirdReadToday,
+                      wirdGoal: _dailyWirdGoalPages,
+                      onJumpPage: _jumpToPage,
+                      onOpenSurahs: () => _openSurahs(palette),
+                      onOpenJuz: () => _openJuz(palette),
+                      onOpenWird: _openWird,
+                      onToggleSecondaryBookmark: _toggleSecondaryBookmark,
+                      onJumpSecondaryBookmark: _secondaryBookmarkPage == null
+                          ? null
+                          : () => _jumpToPage(_secondaryBookmarkPage!),
+                      onOpenScale: () => _openScale(palette),
+                      onOpenTheme: () => _openThemeCustomizer(palette),
                     ),
-                ],
-              ),
-            );
-          },
-        ),
+                  ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -1714,16 +1826,15 @@ class _TopQuickChip extends StatelessWidget {
       child: Material(
         color: bgColor,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(7),
-          side: BorderSide(color: borderColor.withValues(alpha: 0.7)),
+          borderRadius: BorderRadius.circular(5),
+          side: BorderSide(color: borderColor, width: 1.4),
         ),
-        elevation: 1,
         child: InkWell(
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: BorderRadius.circular(5),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: Icon(icon, size: 16, color: color),
+            padding: const EdgeInsets.all(3),
+            child: Icon(icon, size: 14, color: color),
           ),
         ),
       ),
@@ -1839,6 +1950,8 @@ class MushafSingleSheet extends StatelessWidget {
   final String juzTitle;
   final PageThemePalette palette;
   final double scale;
+  final int wirdRead;
+  final int wirdGoal;
 
   const MushafSingleSheet({
     super.key,
@@ -1847,11 +1960,15 @@ class MushafSingleSheet extends StatelessWidget {
     required this.juzTitle,
     required this.palette,
     required this.scale,
+    required this.wirdRead,
+    required this.wirdGoal,
   });
 
   @override
   Widget build(BuildContext context) {
     final String assetPath = 'assets/images/quran/$pageNumber.png';
+    final double wirdRatio =
+        wirdGoal > 0 ? (wirdRead / wirdGoal).clamp(0.0, 1.0) : 0.0;
 
     return Transform.scale(
       scale: scale,
@@ -1866,9 +1983,11 @@ class MushafSingleSheet extends StatelessWidget {
             inkColor: palette.ink,
             surahLabel: 'سورة $surahName',
             juzLabel: juzTitle,
+            wirdRatio: wirdRatio,
           ),
+          // الآيات تملأ كامل مساحة الإطار دون أي مساحة خارجية
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 38, 16, 16),
+            padding: const EdgeInsets.fromLTRB(10, 32, 10, 10),
             child: SizedBox.expand(
               child: Image.asset(
                 assetPath,
@@ -1922,6 +2041,7 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
   final Color inkColor;
   final String surahLabel;
   final String juzLabel;
+  final double wirdRatio;
 
   _AuthenticQuranicFramePainter({
     required this.outerColor,
@@ -1931,22 +2051,23 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
     required this.inkColor,
     required this.surahLabel,
     required this.juzLabel,
+    required this.wirdRatio,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.width <= 48 || size.height <= 48) return;
+    if (size.width <= 32 || size.height <= 32) return;
 
-    const double topInset = 22.0;
+    const double topInset = 18.0;
     final Rect outer =
-        Rect.fromLTRB(7, topInset, size.width - 7, size.height - 7);
-    final Rect mid = outer.deflate(4.0);
-    final Rect inner = outer.deflate(8.5);
+        Rect.fromLTRB(3, topInset, size.width - 3, size.height - 3);
+    final Rect mid = outer.deflate(3.0);
+    final Rect inner = outer.deflate(6.0);
 
     final Paint outerPaint = Paint()
       ..color = outerColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.1;
+      ..strokeWidth = 2.0;
 
     final Paint midPaint = Paint()
       ..color = innerColor
@@ -1956,20 +2077,20 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
     final Paint innerPaint = Paint()
       ..color = outerColor.withValues(alpha: 0.72)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.85;
+      ..strokeWidth = 0.8;
 
-    const double boxHeight = 28.0;
-    const double surahBoxWidth = 122.0;
+    const double boxHeight = 25.0;
+    const double surahBoxWidth = 118.0;
     const double juzBoxWidth = 114.0;
 
     final Rect surahRect = Rect.fromLTWH(
-      outer.right - surahBoxWidth - 10,
+      outer.right - surahBoxWidth - 8,
       2,
       surahBoxWidth,
       boxHeight,
     );
     final Rect juzRect = Rect.fromLTWH(
-      outer.left + 10,
+      outer.left + 8,
       2,
       juzBoxWidth,
       boxHeight,
@@ -1998,13 +2119,25 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
     _drawRosetteDiamond(
       canvas: canvas,
       center: Offset(midBridgeX, bridgeY),
-      radius: 4.2,
+      radius: 3.8,
       strokeColor: outerColor,
       fillColor: paperColor,
     );
 
     canvas.drawRect(mid, midPaint);
     canvas.drawRect(inner, innerPaint);
+
+    // مؤشر تقدم هادئ للورد اليومي على الحافة السفلية للإطار
+    final double barW = (inner.width * 0.42) * wirdRatio.clamp(0.0, 1.0);
+    if (barW > 1) {
+      canvas.drawLine(
+        Offset(inner.center.dx - barW * 0.5, inner.bottom),
+        Offset(inner.center.dx + barW * 0.5, inner.bottom),
+        Paint()
+          ..color = accentColor
+          ..strokeWidth = 2.0,
+      );
+    }
 
     _drawCornerOrnament(
       canvas: canvas,
@@ -2046,21 +2179,21 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
     _drawRosetteDiamond(
       canvas: canvas,
       center: Offset(outer.left, outer.center.dy),
-      radius: 5.0,
+      radius: 4.5,
       strokeColor: outerColor,
       fillColor: paperColor,
     );
     _drawRosetteDiamond(
       canvas: canvas,
       center: Offset(outer.right, outer.center.dy),
-      radius: 5.0,
+      radius: 4.5,
       strokeColor: outerColor,
       fillColor: paperColor,
     );
     _drawRosetteDiamond(
       canvas: canvas,
       center: Offset(outer.center.dx, outer.bottom),
-      radius: 5.0,
+      radius: 4.5,
       strokeColor: outerColor,
       fillColor: paperColor,
     );
@@ -2086,12 +2219,12 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
     required Color innerColor,
     required Color fillColor,
   }) {
-    const double arm = 16.0;
+    const double arm = 13.0;
     final Path arch = Path()
       ..moveTo(corner.dx + dirX * arm, corner.dy)
       ..quadraticBezierTo(
-        corner.dx + dirX * 5.0,
-        corner.dy + dirY * 5.0,
+        corner.dx + dirX * 4.0,
+        corner.dy + dirY * 4.0,
         corner.dx,
         corner.dy + dirY * arm,
       );
@@ -2101,15 +2234,15 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
       Paint()
         ..color = outerColor
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.6,
+        ..strokeWidth = 1.5,
     );
 
     final Offset gemCenter =
-        Offset(corner.dx + dirX * 5.5, corner.dy + dirY * 5.5);
+        Offset(corner.dx + dirX * 4.5, corner.dy + dirY * 4.5);
     _drawRosetteDiamond(
       canvas: canvas,
       center: gemCenter,
-      radius: 3.4,
+      radius: 3.0,
       strokeColor: innerColor,
       fillColor: fillColor,
     );
@@ -2140,7 +2273,7 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
       Paint()
         ..color = strokeColor
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.3,
+        ..strokeWidth = 1.25,
     );
   }
 
@@ -2149,7 +2282,7 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
     required Rect rect,
     required String text,
   }) {
-    final RRect rrect = RRect.fromRectAndRadius(rect, const Radius.circular(7));
+    final RRect rrect = RRect.fromRectAndRadius(rect, const Radius.circular(6));
 
     canvas.drawRRect(
       rrect,
@@ -2163,15 +2296,15 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
       Paint()
         ..color = outerColor
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.9,
+        ..strokeWidth = 1.8,
     );
 
     canvas.drawRRect(
-      rrect.deflate(2.6),
+      rrect.deflate(2.2),
       Paint()
         ..color = innerColor.withValues(alpha: 0.8)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.85,
+        ..strokeWidth = 0.8,
     );
 
     final TextPainter tp = TextPainter(
@@ -2179,14 +2312,14 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
         text: text,
         style: TextStyle(
           color: inkColor,
-          fontSize: 12.0,
+          fontSize: 11.5,
           fontWeight: FontWeight.bold,
         ),
       ),
       textDirection: TextDirection.rtl,
       maxLines: 1,
       ellipsis: '…',
-    )..layout(maxWidth: rect.width - 12);
+    )..layout(maxWidth: rect.width - 10);
 
     tp.paint(
       canvas,
@@ -2205,28 +2338,39 @@ class _AuthenticQuranicFramePainter extends CustomPainter {
       oldDelegate.accentColor != accentColor ||
       oldDelegate.inkColor != inkColor ||
       oldDelegate.surahLabel != surahLabel ||
-      oldDelegate.juzLabel != juzLabel;
+      oldDelegate.juzLabel != juzLabel ||
+      oldDelegate.wirdRatio != wirdRatio;
 }
 
 class _FloatingBottomBar extends StatelessWidget {
   final PageThemePalette palette;
   final int currentPage;
+  final bool hasSecondaryBookmark;
+  final int? secondaryBookmarkPage;
   final int wirdRead;
   final int wirdGoal;
+  final ValueChanged<int> onJumpPage;
   final VoidCallback onOpenSurahs;
   final VoidCallback onOpenJuz;
   final VoidCallback onOpenWird;
+  final VoidCallback onToggleSecondaryBookmark;
+  final VoidCallback? onJumpSecondaryBookmark;
   final VoidCallback onOpenScale;
   final VoidCallback onOpenTheme;
 
   const _FloatingBottomBar({
     required this.palette,
     required this.currentPage,
+    required this.hasSecondaryBookmark,
+    required this.secondaryBookmarkPage,
     required this.wirdRead,
     required this.wirdGoal,
+    required this.onJumpPage,
     required this.onOpenSurahs,
     required this.onOpenJuz,
     required this.onOpenWird,
+    required this.onToggleSecondaryBookmark,
+    required this.onJumpSecondaryBookmark,
     required this.onOpenScale,
     required this.onOpenTheme,
   });
@@ -2239,13 +2383,13 @@ class _FloatingBottomBar extends StatelessWidget {
 
     return Material(
       elevation: 6,
-      color: palette.background.withValues(alpha: 0.97),
+      color: palette.background.withValues(alpha: 0.98),
       borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: palette.ink.withValues(alpha: 0.14)),
+          border: Border.all(color: palette.ink.withValues(alpha: 0.16)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2253,54 +2397,91 @@ class _FloatingBottomBar extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  'الختمة $khatmaPct% • الورد $wirdRead/$wirdGoal',
+                  'ص $currentPage • الختمة $khatmaPct% • الورد $wirdRead/$wirdGoal',
                   style: TextStyle(
-                      fontSize: 12, color: palette.ink.withValues(alpha: 0.85)),
+                      fontSize: 11.5, color: palette.ink.withValues(alpha: 0.88)),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: LinearProgressIndicator(
-                      value: ratio,
-                      minHeight: 6,
-                      backgroundColor: palette.ink.withValues(alpha: 0.12),
-                      valueColor: AlwaysStoppedAnimation<Color>(palette.accent),
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 4,
+                      thumbShape:
+                          const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    ),
+                    child: Slider(
+                      min: 1,
+                      max: 604,
+                      value: currentPage.toDouble().clamp(1, 604),
+                      activeColor: palette.accent,
+                      onChanged: (v) => onJumpPage(v.round()),
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _BarBtn(
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: ratio,
+                minHeight: 4,
+                backgroundColor: palette.ink.withValues(alpha: 0.12),
+                valueColor: AlwaysStoppedAnimation<Color>(palette.accent),
+              ),
+            ),
+            const SizedBox(height: 4),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _BarBtn(
                     icon: Icons.menu_book_outlined,
                     label: 'الفهرس',
                     color: palette.ink,
-                    onTap: onOpenSurahs),
-                _BarBtn(
+                    onTap: onOpenSurahs,
+                  ),
+                  _BarBtn(
                     icon: Icons.grid_view_outlined,
                     label: 'الأجزاء',
                     color: palette.ink,
-                    onTap: onOpenJuz),
-                _BarBtn(
+                    onTap: onOpenJuz,
+                  ),
+                  _BarBtn(
                     icon: Icons.track_changes_outlined,
-                    label: 'الختمة',
+                    label: 'الورد',
                     color: palette.ink,
-                    onTap: onOpenWird),
-                _BarBtn(
+                    onTap: onOpenWird,
+                  ),
+                  _BarBtn(
+                    icon: hasSecondaryBookmark
+                        ? Icons.bookmark_added
+                        : Icons.bookmark_add_outlined,
+                    label: 'علامة ٢',
+                    color: hasSecondaryBookmark ? palette.accent : palette.ink,
+                    onTap: onToggleSecondaryBookmark,
+                  ),
+                  if (onJumpSecondaryBookmark != null &&
+                      secondaryBookmarkPage != null)
+                    _BarBtn(
+                      icon: Icons.my_location,
+                      label: 'ص $secondaryBookmarkPage',
+                      color: palette.accent,
+                      onTap: onJumpSecondaryBookmark!,
+                    ),
+                  _BarBtn(
                     icon: Icons.zoom_in_outlined,
                     label: 'الحجم',
                     color: palette.ink,
-                    onTap: onOpenScale),
-                _BarBtn(
+                    onTap: onOpenScale,
+                  ),
+                  _BarBtn(
                     icon: Icons.palette_outlined,
                     label: 'الثيم',
                     color: palette.ink,
-                    onTap: onOpenTheme),
-              ],
+                    onTap: onOpenTheme,
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -2328,13 +2509,13 @@ class _BarBtn extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 20, color: color),
+            Icon(icon, size: 19, color: color),
             const SizedBox(height: 2),
-            Text(label, style: TextStyle(fontSize: 11, color: color)),
+            Text(label, style: TextStyle(fontSize: 10.5, color: color)),
           ],
         ),
       ),
@@ -2351,26 +2532,38 @@ class AthkarTab extends StatefulWidget {
 
 class _AthkarTabState extends State<AthkarTab> {
   int _selectedCategoryIndex = 0;
+  int _itemIndexInCategory = 0;
+  bool _vibrationEnabled = true;
   final Map<String, int> _counts = {};
 
   @override
   void initState() {
     super.initState();
-    _loadCounts();
+    _selectedCategoryIndex = _suggestCategoryIndexByHour();
+    _loadPrefsAndCounts();
   }
 
-  Future<void> _loadCounts() async {
+  int _suggestCategoryIndexByHour() {
+    final int hour = DateTime.now().hour;
+    if (hour >= 4 && hour < 12) return 0; // أذكار الصباح
+    if (hour >= 15 && hour < 21) return 1; // أذكار المساء
+    return 0;
+  }
+
+  Future<void> _loadPrefsAndCounts() async {
     final prefs = await SharedPreferences.getInstance();
     final String today = _todayKey();
     final String savedDate = prefs.getString('athkar_date') ?? today;
+    final bool vib = prefs.getBool('athkar_vibration') ?? true;
     if (savedDate != today) {
       await prefs.setString('athkar_date', today);
-      return;
     }
     if (!mounted) return;
     setState(() {
+      _vibrationEnabled = vib;
       for (final item in kThikrItems) {
-        _counts[item.id] = prefs.getInt('thikr_${item.id}') ?? 0;
+        _counts[item.id] =
+            savedDate == today ? (prefs.getInt('thikr_${item.id}') ?? 0) : 0;
       }
     });
   }
@@ -2386,35 +2579,58 @@ class _AthkarTabState extends State<AthkarTab> {
     await prefs.setInt('thikr_$id', value);
   }
 
+  Future<void> _toggleVibration() async {
+    final next = !_vibrationEnabled;
+    setState(() => _vibrationEnabled = next);
+    if (next) {
+      HapticFeedback.selectionClick();
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('athkar_vibration', next);
+  }
+
   void _increment(ThikrItem item) {
     final int current = _counts[item.id] ?? 0;
     if (current >= item.targetCount) return;
     final int next = current + 1;
+    final bool completedNow = next >= item.targetCount;
     setState(() => _counts[item.id] = next);
     _saveCount(item.id, next);
+
+    if (_vibrationEnabled) {
+      if (completedNow) {
+        HapticFeedback.heavyImpact();
+      } else {
+        HapticFeedback.lightImpact();
+      }
+    }
   }
 
-  void _resetCategory(String category) {
-    setState(() {
-      for (final item in kThikrItems) {
-        if (item.category == category) {
-          _counts[item.id] = 0;
-          _saveCount(item.id, 0);
-        }
-      }
-    });
+  void _resetCurrentItem(ThikrItem item) {
+    setState(() => _counts[item.id] = 0);
+    _saveCount(item.id, 0);
+    if (_vibrationEnabled) {
+      HapticFeedback.selectionClick();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final String currentCategory = kThikrCategories[_selectedCategoryIndex];
-    final List<ThikrItem> items = kThikrItems
-        .where((item) => item.category == currentCategory)
-        .toList();
+    final List<ThikrItem> items =
+        kThikrItems.where((item) => item.category == currentCategory).toList();
+    final int safeIndex =
+        items.isEmpty ? 0 : _itemIndexInCategory.clamp(0, items.length - 1);
+    final ThikrItem item = items[safeIndex];
+    final int count = _counts[item.id] ?? 0;
+    final bool done = count >= item.targetCount;
+    final double ringProgress =
+        item.targetCount > 0 ? (count / item.targetCount).clamp(0.0, 1.0) : 0.0;
 
     const Color bg = Color(0xFFF6F1E7);
     const Color card = Color(0xFFFFFCF6);
     const Color primary = Color(0xFF235347);
+    const Color ringTrack = Color(0xFFDCE7E2);
     const Color ink = Color(0xFF1E2421);
 
     return Scaffold(
@@ -2422,22 +2638,30 @@ class _AthkarTabState extends State<AthkarTab> {
       appBar: AppBar(
         backgroundColor: bg,
         elevation: 0,
-        title: const Text(
-          'الأذكار اليومية',
-          style: TextStyle(color: ink, fontWeight: FontWeight.bold, fontSize: 18),
+        title: Text(
+          currentCategory,
+          style: const TextStyle(
+              color: ink, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         actions: [
-          IconButton(
-            tooltip: 'تصفير عدّاد القسم الحالي',
-            icon: const Icon(Icons.refresh, color: primary),
-            onPressed: () => _resetCategory(currentCategory),
+          Padding(
+            padding: const EdgeInsets.only(left: 14),
+            child: Center(
+              child: Text(
+                'الذكر ${safeIndex + 1} من ${items.length}',
+                style: TextStyle(
+                    color: ink.withValues(alpha: 0.75),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600),
+              ),
+            ),
           ),
         ],
       ),
       body: Column(
         children: [
           SizedBox(
-            height: 48,
+            height: 44,
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 14),
               scrollDirection: Axis.horizontal,
@@ -2453,80 +2677,204 @@ class _AthkarTabState extends State<AthkarTab> {
                     color: selected ? primary : ink,
                     fontWeight: selected ? FontWeight.bold : FontWeight.normal,
                   ),
-                  onSelected: (_) =>
-                      setState(() => _selectedCategoryIndex = index),
+                  onSelected: (_) {
+                    setState(() {
+                      _selectedCategoryIndex = index;
+                      _itemIndexInCategory = 0;
+                    });
+                  },
                 );
               },
             ),
           ),
-          const SizedBox(height: 8),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 20),
-              itemCount: items.length,
-              itemBuilder: (context, index) {
-                final item = items[index];
-                final int count = _counts[item.id] ?? 0;
-                final bool done = count >= item.targetCount;
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: done ? primary.withValues(alpha: 0.08) : card,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: done
-                          ? primary.withValues(alpha: 0.55)
-                          : ink.withValues(alpha: 0.12),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        item.text,
-                        style: const TextStyle(
-                          color: ink,
-                          fontSize: 16,
-                          height: 1.75,
-                          fontWeight: FontWeight.w500,
-                        ),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: done ? null : () => _increment(item),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+                child: Column(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: card,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: ink.withValues(alpha: 0.10)),
                       ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      child: Column(
                         children: [
                           Text(
-                            done
-                                ? 'مكتمل'
-                                : 'التكرار: $count / ${item.targetCount}',
+                            item.title,
+                            textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: done ? primary : ink.withValues(alpha: 0.72),
+                              color: primary,
+                              fontSize: 13.5,
                               fontWeight: FontWeight.bold,
-                              fontSize: 13,
                             ),
                           ),
-                          FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: done
-                                  ? primary.withValues(alpha: 0.25)
-                                  : primary,
-                              foregroundColor: done ? primary : Colors.white,
+                          const SizedBox(height: 10),
+                          Text(
+                            item.text,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: ink,
+                              fontSize: 17,
+                              height: 1.8,
+                              fontWeight: FontWeight.w500,
                             ),
-                            onPressed: done ? null : () => _increment(item),
-                            icon: Icon(
-                              done ? Icons.check : Icons.add,
-                              size: 18,
-                            ),
-                            label: Text(done ? 'تم' : 'تسبيح ($count)'),
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                );
-              },
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: 172,
+                      height: 172,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox.expand(
+                            child: CircularProgressIndicator(
+                              value: ringProgress,
+                              strokeWidth: 11,
+                              backgroundColor: ringTrack,
+                              valueColor:
+                                  const AlwaysStoppedAnimation<Color>(primary),
+                            ),
+                          ),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '$count',
+                                style: const TextStyle(
+                                  color: ink,
+                                  fontSize: 40,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                '$count/${item.targetCount}',
+                                style: TextStyle(
+                                  color: ink.withValues(alpha: 0.65),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'الهدف: ${item.targetCount}',
+                      style: const TextStyle(
+                        color: ink,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      done ? 'تم إكمال الذكر بنجاح' : 'اضغط في أي مكان للتسبيح',
+                      style: TextStyle(
+                        color: done ? primary : ink.withValues(alpha: 0.65),
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton.outlined(
+                          tooltip: 'الذكر السابق',
+                          onPressed: safeIndex > 0
+                              ? () => setState(
+                                  () => _itemIndexInCategory = safeIndex - 1)
+                              : null,
+                          icon: const Icon(Icons.chevron_right),
+                        ),
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: card,
+                            borderRadius: BorderRadius.circular(12),
+                            border:
+                                Border.all(color: ink.withValues(alpha: 0.12)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              InkWell(
+                                onTap: _toggleVibration,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _vibrationEnabled
+                                          ? Icons.vibration
+                                          : Icons.phone_android,
+                                      color: _vibrationEnabled
+                                          ? primary
+                                          : ink.withValues(alpha: 0.5),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'اهتزاز',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: _vibrationEnabled
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                        color: _vibrationEnabled
+                                            ? primary
+                                            : ink.withValues(alpha: 0.7),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 22),
+                              InkWell(
+                                onTap: () => _resetCurrentItem(item),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.refresh,
+                                        color: ink.withValues(alpha: 0.75)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'تصفير',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: ink.withValues(alpha: 0.75),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        IconButton.outlined(
+                          tooltip: 'الذكر التالي',
+                          onPressed: safeIndex < items.length - 1
+                              ? () => setState(
+                                  () => _itemIndexInCategory = safeIndex + 1)
+                              : null,
+                          icon: const Icon(Icons.chevron_left),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
