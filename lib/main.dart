@@ -1229,7 +1229,7 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
                     ),
                     const SizedBox(height: 14),
                     DropdownButtonFormField<String>(
-                      initialValue: tempMethod,
+                      value: tempMethod,
                       decoration: const InputDecoration(
                         labelText: 'طريقة الحساب',
                         border: OutlineInputBorder(),
