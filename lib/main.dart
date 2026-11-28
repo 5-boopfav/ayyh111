@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:adhan/adhan.dart';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:page_flip/page_flip.dart';
@@ -36,103 +34,24 @@ class BahmadApp extends StatelessWidget {
   }
 }
 
-/// مولّد صوتي داخلي بدون الحاجة لملفات خارجية لتشغيل صوت قلب الورق والتسبيح
+/// مؤثرات صوتية خفيفة مدمجة في Flutter بدون الاعتماد على حزم خارجية
 class SubtleAudioEffects {
   SubtleAudioEffects._();
 
-  static final AudioPlayer _pageFlipPlayer = AudioPlayer();
-  static final AudioPlayer _tapPlayer = AudioPlayer();
-  static bool _configured = false;
-
-  static Future<void> _ensureConfigured() async {
-    if (_configured) return;
-    _configured = true;
-    try {
-      await _pageFlipPlayer.setReleaseMode(ReleaseMode.stop);
-      await _tapPlayer.setReleaseMode(ReleaseMode.stop);
-    } catch (_) {}
-  }
-
-  static Uint8List _buildSoftToneWav({
-    required double startFreq,
-    required double endFreq,
-    required int durationMs,
-    required double peakAmplitude,
-  }) {
-    const int sampleRate = 22050;
-    final int numSamples =
-        math.max(200, ((sampleRate * durationMs) / 1000).round());
-    final int dataSize = numSamples * 2;
-    final ByteData data = ByteData(44 + dataSize);
-
-    void writeAscii(int offset, String s) {
-      for (int i = 0; i < s.length; i++) {
-        data.setUint8(offset + i, s.codeUnitAt(i));
-      }
-    }
-
-    writeAscii(0, 'RIFF');
-    data.setUint32(4, 36 + dataSize, Endian.little);
-    writeAscii(8, 'WAVE');
-    writeAscii(12, 'fmt ');
-    data.setUint32(16, 16, Endian.little);
-    data.setUint16(20, 1, Endian.little); // PCM
-    data.setUint16(22, 1, Endian.little); // Mono
-    data.setUint32(24, sampleRate, Endian.little);
-    data.setUint32(28, sampleRate * 2, Endian.little);
-    data.setUint16(32, 2, Endian.little);
-    data.setUint16(34, 16, Endian.little);
-    writeAscii(36, 'data');
-    data.setUint32(40, dataSize, Endian.little);
-
-    double phase = 0.0;
-    for (int i = 0; i < numSamples; i++) {
-      final double t = i / numSamples;
-      final double env = math.sin(t * math.pi) * (1.0 - t * 0.45);
-      final double freq = startFreq + (endFreq - startFreq) * t;
-      phase += (2.0 * math.pi * freq) / sampleRate;
-
-      // مزيج ناعم من موجة جيبية مع حفيف ورقي خفيف جداً
-      final double harmonic = math.sin(phase) * 0.72 +
-          math.sin(phase * 2.0 + 0.4) * 0.16 +
-          math.cos(phase * 3.1) * 0.12;
-      final double sampleVal = (harmonic * env * peakAmplitude).clamp(-1.0, 1.0);
-      data.setInt16(44 + i * 2, (sampleVal * 32767).round(), Endian.little);
-    }
-
-    return data.buffer.asUint8List();
-  }
-
-  static Future<void> playPageTurn({required bool enabled}) async {
+  static void playPageTurn({required bool enabled}) {
     if (!enabled) return;
-    await _ensureConfigured();
     try {
-      final bytes = _buildSoftToneWav(
-        startFreq: 260,
-        endFreq: 165,
-        durationMs: 115,
-        peakAmplitude: 0.24,
-      );
-      await _pageFlipPlayer.stop();
-      await _pageFlipPlayer.play(BytesSource(bytes));
+      SystemSound.play(SystemSoundType.click);
     } catch (_) {}
   }
 
-  static Future<void> playTap({
+  static void playTap({
     required bool enabled,
     bool completed = false,
-  }) async {
+  }) {
     if (!enabled) return;
-    await _ensureConfigured();
     try {
-      final bytes = _buildSoftToneWav(
-        startFreq: completed ? 520 : 390,
-        endFreq: completed ? 690 : 310,
-        durationMs: completed ? 140 : 65,
-        peakAmplitude: completed ? 0.25 : 0.18,
-      );
-      await _tapPlayer.stop();
-      await _tapPlayer.play(BytesSource(bytes));
+      SystemSound.play(SystemSoundType.click);
     } catch (_) {}
   }
 }
@@ -158,11 +77,9 @@ class SpiritualCalmBackground extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Color.alphaBlend(
-                accentColor.withValues(alpha: 0.05), baseColor),
+            Color.alphaBlend(accentColor.withValues(alpha: 0.05), baseColor),
             baseColor,
-            Color.alphaBlend(
-                accentColor.withValues(alpha: 0.08), baseColor),
+            Color.alphaBlend(accentColor.withValues(alpha: 0.08), baseColor),
           ],
         ),
       ),
@@ -192,7 +109,6 @@ class _SpiritualMotifPainter extends CustomPainter {
     const double archTopY = 24.0;
     final double archWidth = math.min(size.width * 0.72, 290.0);
 
-    // قوس محرابي هادئ في أعلى الخلفية
     final Path archPath = Path()
       ..moveTo(topCenterX - archWidth * 0.5, archTopY + 130)
       ..quadraticBezierTo(
@@ -209,7 +125,6 @@ class _SpiritualMotifPainter extends CustomPainter {
       );
     canvas.drawPath(archPath, paint);
 
-    // نجمة هندسية إسلامية خفيفة في المنتصف
     final Offset center = Offset(size.width * 0.5, size.height * 0.52);
     const double rOuter = 74.0;
     const double rInner = 42.0;
@@ -799,7 +714,7 @@ class _MainThreeTabShellState extends State<MainThreeTabShell> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('app_sound_enabled', val);
     if (val) {
-      await SubtleAudioEffects.playTap(enabled: true);
+      SubtleAudioEffects.playTap(enabled: true);
     }
   }
 
@@ -814,7 +729,6 @@ class _MainThreeTabShellState extends State<MainThreeTabShell> {
 
   @override
   Widget build(BuildContext context) {
-    // شريط التنقل السفلي في الختمة يظهر ويختفي مع شريط التحكم
     final bool showNavBar = _selectedTab != 1 || _khatmaControlsVisible;
 
     return Scaffold(
@@ -1315,7 +1229,7 @@ class _AdhanHomeTabState extends State<AdhanHomeTab> {
                     ),
                     const SizedBox(height: 14),
                     DropdownButtonFormField<String>(
-                      value: tempMethod,
+                      initialValue: tempMethod,
                       decoration: const InputDecoration(
                         labelText: 'طريقة الحساب',
                         border: OutlineInputBorder(),
@@ -1616,7 +1530,6 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
     );
   }
 
-  /// بناء ورقة مزدوجة من صفحتين متقابلتين في العرض الأفقي (اليمين واليسار حسب القراءة العربية)
   Widget _buildLandscapeSpread(
     int rightPage,
     int? leftPage,
@@ -1766,7 +1679,6 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
     );
   }
 
-  /// تقليب الورقة الواحدة في الوضع الطولي
   Widget _buildPortraitFlipBook(PageThemePalette palette) {
     final int startIndex =
         kCrownPointEnabled ? 0 : (_currentPage - 1).clamp(0, totalPages - 1);
@@ -1801,14 +1713,14 @@ class _KhatmaMushafTabState extends State<KhatmaMushafTab> {
     );
   }
 
-  /// تقليب الصفحتين المتقابلتين معاً في الوضع الأفقي
   Widget _buildLandscapeFlipBook(PageThemePalette palette) {
     final List<(int right, int? left)> spreads = [];
     for (int p = 1; p <= totalPages; p += 2) {
       spreads.add((p, p + 1 <= totalPages ? p + 1 : null));
     }
 
-    final int currentSpreadIdx = ((_currentPage - 1) ~/ 2).clamp(0, spreads.length - 1);
+    final int currentSpreadIdx =
+        ((_currentPage - 1) ~/ 2).clamp(0, spreads.length - 1);
     final int startSpread = kCrownPointEnabled ? 0 : currentSpreadIdx;
     final int lastSpreadIdx = spreads.length - 1;
 
@@ -2412,7 +2324,6 @@ class MushafSingleSheet extends StatelessWidget {
             pageLabel: _toArabicIndicDigits(pageNumber),
             wirdRatio: wirdRatio,
           ),
-          // الآيات تملأ كامل مساحة الإطار دون أي هامش خارجي
           child: Padding(
             padding: const EdgeInsets.fromLTRB(17, 36, 17, 26),
             child: SizedBox.expand(
