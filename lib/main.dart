@@ -42,7 +42,6 @@ class _MushafPageFlipScreenState extends State<MushafPageFlipScreen> {
         child: PageFlipWidget(
           key: _pageFlipKey,
           backgroundColor: const Color(0xFF1E1E1E),
-          isRightSwipe: true,
           lastPage: _buildQuranPage(totalPages),
           children: List.generate(
             totalPages - 1,
